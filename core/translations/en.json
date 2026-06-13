@@ -2797,6 +2797,15 @@
       "Delizia": "",
       "Eckhart": "Scan QR code to pair"
     },
+    "tron__claim_unfrozen_balance": "Claim unfrozen balance?",
+    "tron__claim_voting_rewards": "Claim voting rewards?",
+    "tron__not_your_address_footer": {
+      "Bolt": "",
+      "Caesar": "",
+      "Delizia": "",
+      "Eckhart": "This is NOT your address"
+    },
+    "tron__owner_address": "Owner address",
     "tutorial__continue": "Continue tutorial",
     "tutorial__did_you_know": {
       "Bolt": "",

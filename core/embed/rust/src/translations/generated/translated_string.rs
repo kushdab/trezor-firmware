@@ -1625,6 +1625,14 @@ pub enum TranslatedString {
     solana__offchain_is_multisig = 1232,  // "The following message requires multiple signers."
     words__comm_continue = 1233,  // "Communication with your connected device failed. It's safe to continue."
     address__title_cosigner_template = 1234,  // "Cosigner {0}"
+    #[cfg(feature = "universal_fw")]
+    tron__claim_unfrozen_balance = 1235,  // "Claim unfrozen balance?"
+    #[cfg(feature = "universal_fw")]
+    tron__claim_voting_rewards = 1236,  // "Claim voting rewards?"
+    #[cfg(feature = "universal_fw")]
+    tron__not_your_address_footer = 1237,  // {"Bolt": "", "Caesar": "", "Delizia": "", "Eckhart": "This is NOT your address"}
+    #[cfg(feature = "universal_fw")]
+    tron__owner_address = 1238,  // "Owner address"
 }
 
 impl TranslatedString {
@@ -2867,6 +2875,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "",
+                "Owner address",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -4107,6 +4119,10 @@ impl TranslatedString {
                 19719,
                 19790,
                 19802,
+                19825,
+                19846,
+                19846,
+                19859,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -5346,6 +5362,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "",
+                "Owner address",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -6586,6 +6606,10 @@ impl TranslatedString {
                 19719,
                 19790,
                 19802,
+                19825,
+                19846,
+                19846,
+                19859,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -7825,6 +7849,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "",
+                "Owner address",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -9065,6 +9093,10 @@ impl TranslatedString {
                 19719,
                 19790,
                 19802,
+                19825,
+                19846,
+                19846,
+                19859,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -10304,6 +10336,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "",
+                "Owner address",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -11544,6 +11580,10 @@ impl TranslatedString {
                 19719,
                 19790,
                 19802,
+                19825,
+                19846,
+                19846,
+                19859,
             ];
 
         } else if #[cfg(feature = "layout_caesar")] {
@@ -12784,6 +12824,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "",
+                "Owner address",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -14024,6 +14068,10 @@ impl TranslatedString {
                 17657,
                 17728,
                 17740,
+                17763,
+                17784,
+                17784,
+                17797,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -15263,6 +15311,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "",
+                "Owner address",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -16503,6 +16555,10 @@ impl TranslatedString {
                 17657,
                 17728,
                 17740,
+                17763,
+                17784,
+                17784,
+                17797,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -17742,6 +17798,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "",
+                "Owner address",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -18982,6 +19042,10 @@ impl TranslatedString {
                 17657,
                 17728,
                 17740,
+                17763,
+                17784,
+                17784,
+                17797,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -20221,6 +20285,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "",
+                "Owner address",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -21461,6 +21529,10 @@ impl TranslatedString {
                 17657,
                 17728,
                 17740,
+                17763,
+                17784,
+                17784,
+                17797,
             ];
 
         } else if #[cfg(feature = "layout_delizia")] {
@@ -22701,6 +22773,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "",
+                "Owner address",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -23941,6 +24017,10 @@ impl TranslatedString {
                 19092,
                 19163,
                 19175,
+                19198,
+                19219,
+                19219,
+                19232,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -25180,6 +25260,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "",
+                "Owner address",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -26420,6 +26504,10 @@ impl TranslatedString {
                 19092,
                 19163,
                 19175,
+                19198,
+                19219,
+                19219,
+                19232,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -27659,6 +27747,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "",
+                "Owner address",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -28899,6 +28991,10 @@ impl TranslatedString {
                 19092,
                 19163,
                 19175,
+                19198,
+                19219,
+                19219,
+                19232,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -30138,6 +30234,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "",
+                "Owner address",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -31378,6 +31478,10 @@ impl TranslatedString {
                 19092,
                 19163,
                 19175,
+                19198,
+                19219,
+                19219,
+                19232,
             ];
 
         } else if #[cfg(feature = "layout_eckhart")] {
@@ -32618,6 +32722,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "This is NOT your address",
+                "Owner address",
             );
 
             #[cfg(all(feature = "debug", feature = "universal_fw"))]
@@ -33858,6 +33966,10 @@ impl TranslatedString {
                 20413,
                 20484,
                 20496,
+                20519,
+                20540,
+                20564,
+                20577,
             ];
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -35097,6 +35209,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "This is NOT your address",
+                "Owner address",
             );
 
             #[cfg(all(feature = "debug", not(feature = "universal_fw")))]
@@ -36337,6 +36453,10 @@ impl TranslatedString {
                 20413,
                 20484,
                 20496,
+                20519,
+                20540,
+                20564,
+                20577,
             ];
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -37576,6 +37696,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "This is NOT your address",
+                "Owner address",
             );
 
             #[cfg(all(not(feature = "debug"), feature = "universal_fw"))]
@@ -38816,6 +38940,10 @@ impl TranslatedString {
                 20413,
                 20484,
                 20496,
+                20519,
+                20540,
+                20564,
+                20577,
             ];
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -40055,6 +40183,10 @@ impl TranslatedString {
                 "The following message requires multiple signers.",
                 "Communication with your connected device failed. It's safe to continue.",
                 "Cosigner {0}",
+                "Claim unfrozen balance?",
+                "Claim voting rewards?",
+                "This is NOT your address",
+                "Owner address",
             );
 
             #[cfg(all(not(feature = "debug"), not(feature = "universal_fw")))]
@@ -41295,6 +41427,10 @@ impl TranslatedString {
                 20413,
                 20484,
                 20496,
+                20519,
+                20540,
+                20564,
+                20577,
             ];
 
         }
@@ -42747,6 +42883,14 @@ impl TranslatedString {
         (Qstr::MP_QSTR_thp__pair_new_device, Self::thp__pair_new_device),
         (Qstr::MP_QSTR_thp__pair_title, Self::thp__pair_title),
         (Qstr::MP_QSTR_thp__qr_title, Self::thp__qr_title),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_tron__claim_unfrozen_balance, Self::tron__claim_unfrozen_balance),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_tron__claim_voting_rewards, Self::tron__claim_voting_rewards),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_tron__not_your_address_footer, Self::tron__not_your_address_footer),
+        #[cfg(feature = "universal_fw")]
+        (Qstr::MP_QSTR_tron__owner_address, Self::tron__owner_address),
         (Qstr::MP_QSTR_tutorial__continue, Self::tutorial__continue),
         (Qstr::MP_QSTR_tutorial__did_you_know, Self::tutorial__did_you_know),
         (Qstr::MP_QSTR_tutorial__exit, Self::tutorial__exit),
