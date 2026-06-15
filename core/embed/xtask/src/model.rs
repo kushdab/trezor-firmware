@@ -18,6 +18,8 @@ pub enum Model {
     T3B1,
     #[value(name = "t3t1")]
     T3T1,
+    #[value(name = "t3t2")]
+    T3T2,
     #[value(name = "t3w1")]
     T3W1,
 }
@@ -39,6 +41,7 @@ impl Model {
             Model::T2B1 => "T2B1",
             Model::T3B1 => "T3B1",
             Model::T3T1 => "T3T1",
+            Model::T3T2 => "T3T2",
             Model::T3W1 => "T3W1",
         }
     }
