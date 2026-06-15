@@ -4261,14 +4261,14 @@ if TYPE_CHECKING:
     class EvoluRegistrationRequest(protobuf.MessageType):
         certificate_chain: "list[AnyBytes]"
         signature: "AnyBytes"
-        rotation_index: "int | None"
+        rotation_index: "int"
 
         def __init__(
             self,
             *,
             signature: "AnyBytes",
+            rotation_index: "int",
             certificate_chain: "list[AnyBytes] | None" = None,
-            rotation_index: "int | None" = None,
         ) -> None:
             pass
 

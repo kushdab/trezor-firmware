@@ -253,8 +253,8 @@ def test_evolu_sign_request_with_different_rotation_indices(
         response.signature, response.certificate_chain, client.model, data
     )
 
+    assert response.rotation_index is not None
     if rotation_index is None:
         assert response.rotation_index == 0
     else:
-        assert response.rotation_index is not None
         assert response.rotation_index == rotation_index
