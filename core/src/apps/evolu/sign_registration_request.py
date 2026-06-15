@@ -83,9 +83,7 @@ def _check_data(challenge: AnyBytes, size: int) -> tuple[AnyBytes, bytes]:
     return challenge, size_to_acquire_bytes
 
 
-def _get_signature(
-    challenge_bytes: AnyBytes, size_bytes: bytes
-) -> tuple[bytes, int | None]:
+def _get_signature(challenge_bytes: AnyBytes, size_bytes: bytes) -> tuple[bytes, int]:
     from storage.device import get_delegated_identity_key_rotation_index
     from trezor import utils, wire
     from trezor.crypto import optiga
