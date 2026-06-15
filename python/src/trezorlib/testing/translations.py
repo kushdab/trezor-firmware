@@ -19,34 +19,23 @@ ROOT = HERE.parent.parent.parent.parent
 
 
 def get_translations_dir() -> Path:
-    """
-    Return the translations directory.
-
-    Searches in the following order:
-    1. Environment variable TREZOR_TRANSLATIONS_DIR (explicit override)
-    2. Legacy location relative to firmware repo root
-
-    Raises:
-        FileNotFoundError: If the translations directory cannot be found.
-
-    Returns:
-        Path: Path to the translations directory.
-    """
-
     env_dir = os.environ.get("TREZOR_TRANSLATIONS_DIR")
     if env_dir:
         env_dir = Path(env_dir)
         if env_dir.is_dir():
             return env_dir
+        raise FileNotFoundError(
+            f"TREZOR_TRANSLATIONS_DIR is set to '{env_dir}' but it is not a valid directory."
+        )
     else:
         # Legacy: translations living in the firmware repo
         legacy = ROOT / "core" / "translations"
         if legacy.is_dir():
             return legacy
 
-    raise FileNotFoundError(
-        "Translations directory not found. Set TREZOR_TRANSLATIONS_DIR environment variable."
-    )
+        raise FileNotFoundError(
+            "Translations directory not found. Set TREZOR_TRANSLATIONS_DIR environment variable."
+        )
 
 
 TRANSLATIONS_DIR = get_translations_dir()
