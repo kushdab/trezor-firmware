@@ -17,7 +17,7 @@ def signing_buffer(
 ) -> bytes:
     public_key: VerifyingKey = SigningKey.from_string(private_key, curve=NIST256p).get_verifying_key()  # type: ignore
     components = [
-        b"EvoluSignRegistrationRequestV1:",
+        b"EvoluSignRegistrationRequestV2:",
         public_key.to_string("uncompressed"),
         challenge,
         size.to_bytes(4, "big"),
@@ -72,7 +72,9 @@ def test_evolu_sign_request(client: Client):
         proof=proposed_value,
     )
 
-    data = signing_buffer(delegated_identity_key, challenge, size)
+    data = signing_buffer(
+        delegated_identity_key, challenge, size, rotation_index=response.rotation_index
+    )
     check_signature_optiga(
         response.signature, response.certificate_chain, client.model, data
     )
@@ -210,7 +212,9 @@ def test_evolu_sign_request_data_higher_bound(client: Client):
         proof=proof,
     )
 
-    data = signing_buffer(delegated_identity_key, challenge, size)
+    data = signing_buffer(
+        delegated_identity_key, challenge, size, rotation_index=response.rotation_index
+    )
     check_signature_optiga(
         response.signature, response.certificate_chain, client.model, data
     )
@@ -242,17 +246,15 @@ def test_evolu_sign_request_with_different_rotation_indices(
         proof=proof,
     )
 
-    if (rotation_index or 0) == 0:
-        data = signing_buffer(delegated_identity_key, challenge, size)
-    else:
-        data = signing_buffer(delegated_identity_key, challenge, size, rotation_index)
-
+    data = signing_buffer(
+        delegated_identity_key, challenge, size, rotation_index=response.rotation_index
+    )
     check_signature_optiga(
         response.signature, response.certificate_chain, client.model, data
     )
 
     if rotation_index is None:
-        assert response.rotation_index is None
+        assert response.rotation_index == 0
     else:
         assert response.rotation_index is not None
         assert response.rotation_index == rotation_index
