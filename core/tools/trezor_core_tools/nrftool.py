@@ -10,8 +10,9 @@ import yaml
 
 from trezorlib import _ed25519 as ed25519
 from trezorlib._internal import firmware_headers as fw_headers
-from trezorlib.firmware import InvalidSignatureError, nrf
+from trezorlib.firmware import nrf
 from trezorlib.firmware.models import Model
+from trezorlib.firmware.util import InvalidSignatureError
 
 HERE = Path(__file__).parent.resolve()
 ROOT = HERE.parent.parent.parent
@@ -47,39 +48,6 @@ def _format_tlv(tlv: nrf.TlvTable) -> str:
 def get_partition_info() -> munch.Munch:
     ret: t.Any = munch.munchify(yaml.safe_load(PARTITION_FILE.read_text()))
     return ret
-
-
-class NrfImage(nrf.NrfImage):
-    NAME: t.ClassVar[str] = "nrf"
-
-    def signature_present(self) -> bool:
-        return (
-            nrf.TlvType.SIGNATURE1 in self.unprotected_tlv
-            and nrf.TlvType.SIGNATURE2 in self.unprotected_tlv
-        )
-
-    def format(self, verbose: bool = False) -> str:
-        header_str = "NrfHeader " + fw_headers._format_container(self.header)
-        image_str = f"Image data: {len(self.img_data)} bytes"
-        protected_tlv_str = _format_tlv(self.protected_tlv)
-        unprotected_tlv_str = _format_tlv(self.unprotected_tlv)
-        fingerprint_str = (
-            f"Calculated fingerprint: {click.style(self.digest().hex(), bold=True)}"
-        )
-        sig_result = fw_headers._check_signature_any(self)
-        sig_ok = fw_headers.SYM_OK if sig_result.is_ok() else fw_headers.SYM_FAIL
-        sig_str = f"{sig_ok} Signature is {sig_result.value}"
-
-        return "\n".join(
-            [
-                header_str,
-                image_str,
-                protected_tlv_str,
-                unprotected_tlv_str,
-                fingerprint_str,
-                sig_str,
-            ]
-        )
 
 
 class FileSource:
@@ -150,7 +118,7 @@ def get_version() -> tuple[int, int, int, int]:
 
 
 @click.group()
-def cli():
+def cli() -> None:
     pass
 
 
@@ -187,7 +155,7 @@ def wrap(binary_file: Path, output_file: Path, board: str) -> None:
 
     infile = FileSource.from_path(binary_file)
     try:
-        NrfImage.parse(infile.read())
+        fw_headers.NrfImage.parse(infile.read())
     except Exception:
         pass
     else:
@@ -203,7 +171,7 @@ def wrap(binary_file: Path, output_file: Path, board: str) -> None:
 
     assert pm.mcuboot_pad.address + pm.mcuboot_pad.size == pm.app.address
 
-    image = NrfImage.create(
+    image = fw_headers.NrfImage.create(
         version=version,
         img_data=img_data,
         header_size=pm.mcuboot_pad.size,
@@ -220,7 +188,7 @@ def wrap(binary_file: Path, output_file: Path, board: str) -> None:
 )
 def dump(binary_file: Path) -> None:
     """Dump image information to the console."""
-    image = NrfImage.parse(FileSource.from_path(binary_file).read())
+    image = fw_headers.NrfImage.parse(FileSource.from_path(binary_file).read())
     click.echo(image.format())
 
 
@@ -235,9 +203,9 @@ def digest(binary_file: Path, sigmask: int | None) -> None:
 
     If -s is specified, a digest with a modified sigmask is printed instead.
     """
-    image = NrfImage.parse(FileSource.from_path(binary_file).read())
+    image = fw_headers.NrfImage.parse(FileSource.from_path(binary_file).read())
     if sigmask is not None:
-        image.sigmask = sigmask
+        image.insert_sigmask(sigmask)
     print(image.digest().hex())
 
 
@@ -262,8 +230,8 @@ def sign(
     To insert development signatures, use `nrftool sign-dev` instead.
     """
     binary_source = FileSource.from_path(binary_file)
-    image = NrfImage.parse(binary_source.read())
-    image.sigmask = sigmask
+    image = fw_headers.NrfImage.parse(binary_source.read())
+    image.insert_sigmask(sigmask)
     sig1 = bytes.fromhex(signature1_hex)
     sig2 = bytes.fromhex(signature2_hex)
     image.set_signatures((sig1, sig2))
@@ -284,8 +252,8 @@ def sign(
 def sign_dev(binary_file: Path) -> None:
     """Insert development signatures into the image."""
     binary_source = FileSource.from_path(binary_file)
-    image = NrfImage.parse(binary_source.read())
-    image.sigmask = 0x03
+    image = fw_headers.NrfImage.parse(binary_source.read())
+    image.insert_sigmask(sigmask=0x03)
     digest = image.digest()
     sig1 = ed25519.signature_unsafe(
         digest, DEV_KEYS[0], ed25519.publickey_unsafe(DEV_KEYS[0])
@@ -350,7 +318,7 @@ def convert(from_file: Path, to_file: Path, offset: int | None) -> None:
     if offset is None:
         pm = get_partition_info()
         try:
-            NrfImage.parse(from_source.read())
+            fw_headers.NrfImage.parse(from_source.read())
         except Exception:
             # this is a raw file -- probably should go to `app` offset
             offset = pm.app.address

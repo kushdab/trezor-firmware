@@ -45,7 +45,6 @@ class HeaderType(Enum):
     FIRMWARE = b"TRZF"
     BOOTLOADER = b"TRZB"
     BOOTLOADER_V2 = b"TRZQ"
-    NRF_FIRMWARE = bytes.fromhex("3DB8F396")
 
 
 class FirmwareHeader(SanityCheckedStruct):
@@ -98,7 +97,7 @@ class FirmwareHeader(SanityCheckedStruct):
         "_end_offset" / c.Tell,
 
         "_rebuild_header_len" / c.If(
-            c.this.version[0] > 1,  # type: ignore [parameter "name" of type "str"]
+            c.this.version[0] > 1,
             c.Pointer(
                 c.this._start_offset + 4,
                 c.Rebuild(c.Int32ul, c.this._end_offset - c.this._start_offset)

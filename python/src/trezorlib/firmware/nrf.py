@@ -1,37 +1,24 @@
 from __future__ import annotations
 
 import hashlib
+import typing as t
 from enum import IntEnum
 
 import construct as c
-from construct_classes import Struct, subcon
+from construct_classes import subcon
 from typing_extensions import Self
 
 from .. import _ed25519 as ed25519
-from ..tools import EnumAdapter, TupleAdapter
+from ..construct_helpers import EnumAdapter, TupleAdapter
 from . import util
-from .models import Model
+from .models import Model, get_nrf_keys
+from .sanity_struct import STRICT_SANITY_CHECK_DEFAULT, SanityCheckedStruct
 
 __all__ = ["NrfImage", "NrfHeader"]
 
-IMAGE_MAGIC = 0x96F3B83D
-IMAGE_HEADER_SIZE = 32
 
-NRF_DEV_KEYS = [
-    bytes.fromhex(k)
-    for k in (
-        "d759793bbc13a2819a827c76adb6fba8a49aee007f49f2d0992d99b825ad2c48",
-        "6355691c178a8ff91007a7478afb955ef7352c63e7b25703984cf78b26e21a56",
-    )
-]
-NRF_KEYS = [
-    bytes.fromhex(k)
-    for k in (
-        "d1bad5e8c73dfe183ba1bd5464b2c96f1d1de66d53c95026d17169148d096f3e",
-        "585f0635efc6518c490228a72ae1f5d0808ebe77f1c12516eb6d525821eb1e21",
-        "065ee19b0de4eec3be70938935313ca2949cc3808b2bf3ad7ef0ac419a974191",
-    )
-]
+NRF_IMAGE_MAGIC = bytes.fromhex("3DB8F396")
+NRF_IMAGE_HEADER_SIZE = 32
 
 
 class TlvType(IntEnum):
@@ -47,7 +34,7 @@ class TlvTableType(IntEnum):
     UNPROTECTED = 0x6907
 
 
-class TlvEntry(Struct):
+class TlvEntry(SanityCheckedStruct):
     id: int | TlvType
     data: bytes
 
@@ -57,7 +44,7 @@ class TlvEntry(Struct):
     )
 
 
-class TlvTable(Struct):
+class TlvTable(SanityCheckedStruct):
     magic: TlvTableType
     entries: list[TlvEntry] = subcon(TlvEntry)
     length: int = 4
@@ -93,13 +80,17 @@ class TlvTable(Struct):
         self.entries.append(TlvEntry(id=key, data=value))
 
     def __delitem__(self, key: TlvType) -> None:
-        self.entries = [entry for entry in self.entries if entry.id != key]
+        for i, entry in enumerate(self.entries):
+            if entry.id == key:
+                del self.entries[i]
+                return
+        raise KeyError(f"TlvType {key} not found")
 
     def __contains__(self, key: TlvType) -> bool:
         return any(entry.id == key for entry in self.entries)
 
 
-class NrfHeader(Struct):
+class NrfHeader(SanityCheckedStruct):
     load_addr: int
     hdr_size: int
     protected_tlv_size: int
@@ -110,7 +101,7 @@ class NrfHeader(Struct):
 
     SUBCON = c.Struct(
         "_start_offset" / c.Tell,
-        "magic" / c.Const(IMAGE_MAGIC, c.Int32ul),
+        "_magic" / c.Const(NRF_IMAGE_MAGIC, c.Bytes(4)),
         "load_addr" / c.Int32ul,
         "hdr_size" / c.Int16ul,
         "protected_tlv_size" / c.Int16ul,
@@ -157,6 +148,9 @@ class NrfHeader(Struct):
         # re-parsing will pick out the default value
         reparsed = cls.SUBCON.parse(header_empty)
         # ...which we can use to figure out the correct length
+
+        assert reparsed is not None  # TODO to make stylechecker happy
+
         padding_bytes = bytearray(padding_byte * len(reparsed["_trailing_data"]))
         # XXX hack to get binary identical with imgtool:
         padding_bytes[0:4] = b"\x00\x00\x00\x00"
@@ -171,7 +165,7 @@ class NrfHeader(Struct):
         )
 
 
-class NrfImage(Struct):
+class NrfImage(SanityCheckedStruct):
     header: NrfHeader = subcon(NrfHeader)
     img_data: bytes
     protected_tlv: TlvTable = subcon(TlvTable)
@@ -187,8 +181,8 @@ class NrfImage(Struct):
     )
 
     @classmethod
-    def parse(cls, data: bytes) -> Self:
-        parsed = super().parse(data)
+    def parse(cls, data: bytes, *, strict: bool = STRICT_SANITY_CHECK_DEFAULT) -> Self:
+        parsed = super().parse(data, strict=strict)
         parsed._verify_integrity()
         return parsed
 
@@ -217,11 +211,18 @@ class NrfImage(Struct):
         return hasher.digest()
 
     @property
+    def model(self) -> Model:
+        return Model(self.protected_tlv[TlvType.MODEL])
+
+    @model.setter
+    def model(self, model: Model) -> None:
+        self.protected_tlv[TlvType.MODEL] = model.value
+
+    @property
     def sigmask(self) -> int:
         return int.from_bytes(self.protected_tlv[TlvType.SIGMASK], "little")
 
-    @sigmask.setter
-    def sigmask(self, sigmask: int) -> None:
+    def insert_sigmask(self, sigmask: int) -> None:
         self.protected_tlv[TlvType.SIGMASK] = sigmask.to_bytes(1, "little")
         self._update_digest()
 
@@ -229,14 +230,8 @@ class NrfImage(Struct):
         self.unprotected_tlv[TlvType.SIGNATURE1] = signatures[0]
         self.unprotected_tlv[TlvType.SIGNATURE2] = signatures[1]
 
-    @property
-    def model(self) -> Model:
-        model_bytes = self.protected_tlv[TlvType.MODEL]
-        return Model.from_bytes(model_bytes)
-
-    @model.setter
-    def model(self, model: Model) -> None:
-        self.protected_tlv[TlvType.MODEL] = model.value
+    def public_keys(self, dev_keys: bool = False) -> t.Sequence[bytes]:
+        return get_nrf_keys(self.model, dev_keys)
 
     @classmethod
     def create(
@@ -263,7 +258,7 @@ class NrfImage(Struct):
             unprotected_tlv=TlvTable(magic=TlvTableType.UNPROTECTED, entries=[]),
             trailer=b"",
         )
-        image.sigmask = sigmask
+        image.insert_sigmask(sigmask)
         image.model = model
         # force update of digest
         image.digest()
@@ -272,19 +267,19 @@ class NrfImage(Struct):
     def verify(self, dev_keys: bool = False) -> None:
         digest = self.digest()
         sigmask = self.sigmask
-        model_keys = NRF_DEV_KEYS if dev_keys else NRF_KEYS
-        indexes = []
-        for i in range(8):
-            if sigmask & (1 << i):
-                indexes.append(i)
+        keys = self.public_keys(dev_keys)
+        signature_1 = self.unprotected_tlv[TlvType.SIGNATURE1]
+        signature_2 = self.unprotected_tlv[TlvType.SIGNATURE2]
 
-        if len(indexes) != 2:
-            raise util.InvalidSignatureError("Invalid sigmask")
+        if sigmask.bit_length() > len(keys):
+            raise ValueError("Sigmask specifies more public keys than provided.")
 
-        sig1 = self.unprotected_tlv[TlvType.SIGNATURE1]
-        sig2 = self.unprotected_tlv[TlvType.SIGNATURE2]
+        selected_keys = [key for i, key in enumerate(keys) if sigmask & (1 << i)]
+
+        if len(selected_keys) != 2:
+            raise ValueError("Sigmask does not specify two keys.")
         try:
-            ed25519.checkvalid(sig1, digest, model_keys[indexes[0]])
-            ed25519.checkvalid(sig2, digest, model_keys[indexes[1]])
+            ed25519.checkvalid(signature_1, digest, selected_keys[0])
+            ed25519.checkvalid(signature_2, digest, selected_keys[1])
         except ed25519.SignatureMismatch as e:
             raise util.InvalidSignatureError("Invalid signature") from e
