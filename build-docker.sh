@@ -289,6 +289,9 @@ for TREZOR_MODEL in ${MODELS[@]}; do
                       -o build-xtask/artifacts/$TREZOR_MODEL/\$item.bin.fingerprint \
                       build-xtask/artifacts/$TREZOR_MODEL/\$item.bin \
                       || echo "No fingerprint for build-xtask/artifacts/TREZOR_MODEL/\$item.bin"
+          uv run ../python/tools/master-fingerprint.py \
+                      build-xtask/artifacts/$TREZOR_MODEL/\$item.bin \
+                      >> /local/build/${COMMIT_HASH}.fingerprints 2>/dev/null || true
         fi
         if [ -f build-xtask/artifacts/$TREZOR_MODEL/\$item.bin ]; then
           # copy only the artifacts to the build output directory
@@ -297,6 +300,7 @@ for TREZOR_MODEL in ${MODELS[@]}; do
         fi
       done
       chown -R $USER:$GROUP /build
+      chown $USER:$GROUP /local/build/${COMMIT_HASH}.fingerprints 2>/dev/null || true
 EOF
 
     echo
@@ -455,7 +459,11 @@ if echo "${MODELS[@]}" | grep -q T1B1 ; then
       uv run ../python/tools/firmware-fingerprint.py \
                  -o build/firmware/firmware.bin.fingerprint \
                  build/firmware/firmware.bin
+      uv run ../python/tools/master-fingerprint.py \
+                 build/firmware/firmware.bin \
+                 >> /local/build/${COMMIT_HASH}.fingerprints 2>/dev/null || true
       chown -R $USER:$GROUP /build
+      chown $USER:$GROUP /local/build/${COMMIT_HASH}.fingerprints 2>/dev/null || true
 EOF
 
     echo
@@ -516,4 +524,19 @@ if [ "$OPT_BUILD_NRF" -eq 1 ]; then
       fi
     done
   fi
+fi
+
+echo
+FINGERPRINTS_FILE="build/${COMMIT_HASH}.fingerprints"
+if [ -f "$FINGERPRINTS_FILE" ]; then
+  sort -u -o "$FINGERPRINTS_FILE" "$FINGERPRINTS_FILE"
+  echo "Fingerprints added to $FINGERPRINTS_FILE"
+  # Digesting the file into the master fingerprint needs only python3 + click (no
+  # trezorlib), so we attempt it on the host. If those aren't available it is fine
+  # to skip -- the file holds every fingerprint and the master can be computed later
+  # anywhere with: master-fingerprint.py -f <file>
+  python3 "$DIR/python/tools/master-fingerprint.py" -f "$FINGERPRINTS_FILE" \
+    || echo "(master not computed here; run: master-fingerprint.py -f $FINGERPRINTS_FILE)"
+else
+  echo "(no firmware images built)"
 fi
