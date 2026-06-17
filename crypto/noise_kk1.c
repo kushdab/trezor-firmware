@@ -18,7 +18,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "noise.h"
+#include "noise_kk1.h"
 #include <string.h>
 
 #include "aes/aesgcm.h"
@@ -155,8 +155,8 @@ static bool increase_nonce(uint8_t nonce[NOISE_NONCE_SIZE]) {
   return false;
 }
 
-bool noise_create_handshake_request(noise_context_t *ctx,
-                                    noise_request_t *request) {
+bool noise_kk1_create_handshake_request(noise_kk1_context_t *ctx,
+                                        noise_kk1_request_t *request) {
   memzero(ctx, sizeof(*ctx));
   ctx->initialized = false;
 
@@ -167,11 +167,10 @@ bool noise_create_handshake_request(noise_context_t *ctx,
   return true;
 }
 
-bool noise_handle_handshake_request(noise_context_t *ctx,
-                                    const curve25519_key initiator_public_key,
-                                    const curve25519_key responder_private_key,
-                                    const noise_request_t *request,
-                                    noise_response_t *response) {
+bool noise_kk1_handle_handshake_request(
+    noise_kk1_context_t *ctx, const curve25519_key initiator_public_key,
+    const curve25519_key responder_private_key,
+    const noise_kk1_request_t *request, noise_kk1_response_t *response) {
   memzero(ctx, sizeof(*ctx));
 
   curve25519_key responder_public_key = {0};
@@ -232,10 +231,10 @@ bool noise_handle_handshake_request(noise_context_t *ctx,
   return true;
 }
 
-bool noise_handle_handshake_response(noise_context_t *ctx,
-                                     const curve25519_key initiator_private_key,
-                                     const curve25519_key responder_public_key,
-                                     const noise_response_t *response) {
+bool noise_kk1_handle_handshake_response(
+    noise_kk1_context_t *ctx, const curve25519_key initiator_private_key,
+    const curve25519_key responder_public_key,
+    const noise_kk1_response_t *response) {
   curve25519_key initiator_public_key = {0};
   curve25519_scalarmult_basepoint(initiator_public_key, initiator_private_key);
 
@@ -293,9 +292,11 @@ bool noise_handle_handshake_response(noise_context_t *ctx,
   return true;
 }
 
-bool noise_send_message(noise_context_t *ctx, const uint8_t *associated_data,
-                        size_t associated_data_length, const uint8_t *plaintext,
-                        size_t plaintext_length, uint8_t *ciphertext) {
+bool noise_kk1_send_message(noise_kk1_context_t *ctx,
+                            const uint8_t *associated_data,
+                            size_t associated_data_length,
+                            const uint8_t *plaintext, size_t plaintext_length,
+                            uint8_t *ciphertext) {
   if (!ctx->initialized) {
     return false;
   }
@@ -314,10 +315,11 @@ bool noise_send_message(noise_context_t *ctx, const uint8_t *associated_data,
   return true;
 }
 
-bool noise_receive_message(noise_context_t *ctx, const uint8_t *associated_data,
-                           size_t associated_data_length,
-                           const uint8_t *ciphertext, size_t ciphertext_length,
-                           uint8_t *plaintext) {
+bool noise_kk1_receive_message(noise_kk1_context_t *ctx,
+                               const uint8_t *associated_data,
+                               size_t associated_data_length,
+                               const uint8_t *ciphertext,
+                               size_t ciphertext_length, uint8_t *plaintext) {
   if (!ctx->initialized) {
     return false;
   }
@@ -336,18 +338,18 @@ bool noise_receive_message(noise_context_t *ctx, const uint8_t *associated_data,
   return true;
 }
 
-bool noise_handle_handshake_response_multiple_keys(
-    noise_context_t *ctx, const curve25519_key initiator_private_key,
+bool noise_kk1_handle_handshake_response_multiple_keys(
+    noise_kk1_context_t *ctx, const curve25519_key initiator_private_key,
     const curve25519_key *responder_public_keys,
-    size_t responder_public_keys_count, const noise_response_t *response) {
+    size_t responder_public_keys_count, const noise_kk1_response_t *response) {
   curve25519_key ephemeral_key_backup = {0};
   memcpy(ephemeral_key_backup, ctx->initiator_ephemeral_private_key,
          sizeof(ephemeral_key_backup));
   for (size_t i = 0; i < responder_public_keys_count; i++) {
     memcpy(ctx->initiator_ephemeral_private_key, ephemeral_key_backup,
            sizeof(ephemeral_key_backup));
-    if (noise_handle_handshake_response(ctx, initiator_private_key,
-                                        responder_public_keys[i], response)) {
+    if (noise_kk1_handle_handshake_response(
+            ctx, initiator_private_key, responder_public_keys[i], response)) {
       memzero(ephemeral_key_backup, sizeof(ephemeral_key_backup));
       return true;
     }
