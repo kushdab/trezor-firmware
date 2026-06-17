@@ -206,7 +206,9 @@ static bool encrypt_with_ad(cipher_state_t *cs, const uint8_t *ad,
     uint8_t nonce_bytes[NONCE_ARRAY_SIZE_BYTES] = {0};
     nonce_to_bytes(cs->nonce, &nonce_bytes);
 
-    memcpy(enc_bytes, dec_bytes, dec_bytes_len);
+    if (enc_bytes != NULL && dec_bytes != NULL) {  // to suppress asan warning
+      memcpy(enc_bytes, dec_bytes, dec_bytes_len);
+    }
 
     if (gcm_encrypt_message(nonce_bytes, NONCE_ARRAY_SIZE_BYTES, ad, ad_len,
                             enc_bytes, dec_bytes_len, enc_bytes + dec_bytes_len,
@@ -262,7 +264,10 @@ static bool decrypt_with_ad(cipher_state_t *cs, const uint8_t *ad,
 
     // decrypted message is shorter by auth. tag
     size_t dec_bytes_len = enc_bytes_len - NOISE_TAG_SIZE_BYTES;
-    memcpy(dec_bytes, enc_bytes, dec_bytes_len);
+
+    if (dec_bytes != NULL && enc_bytes != NULL) {  // to suppress asan warning
+      memcpy(dec_bytes, enc_bytes, dec_bytes_len);
+    }
 
     if (gcm_decrypt_message(nonce_bytes, NONCE_ARRAY_SIZE_BYTES, ad, ad_len,
                             dec_bytes, dec_bytes_len, enc_bytes + dec_bytes_len,

@@ -44,7 +44,9 @@ static bool encrypt(const uint8_t key[NOISE_KEY_SIZE],
     return false;
   }
 
-  memcpy(ciphertext, plaintext, plaintext_length);
+  if (ciphertext != NULL && plaintext != NULL) {  // to suppress asan warning
+    memcpy(ciphertext, plaintext, plaintext_length);
+  }
 
   if (gcm_encrypt_message(nonce, NOISE_NONCE_SIZE, associated_data,
                           associated_data_length, ciphertext, plaintext_length,
@@ -75,7 +77,9 @@ static bool decrypt(const uint8_t key[NOISE_KEY_SIZE],
     return false;
   }
 
-  memcpy(plaintext, ciphertext, plaintext_length);
+  if (plaintext != NULL && ciphertext != NULL) {  // to suppress asan warning
+    memcpy(plaintext, ciphertext, plaintext_length);
+  }
 
   if (gcm_decrypt_message(nonce, NOISE_NONCE_SIZE, associated_data,
                           associated_data_length, plaintext, plaintext_length,
