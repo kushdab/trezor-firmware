@@ -1354,3 +1354,179 @@ bool tropic_data_multi_read(uint16_t first_slot, uint16_t slot_count,
 
   return true;
 }
+
+// --------------------------- NEW TROPIC CFG SETTING LOGIC ---------------------------
+
+typedef struct {
+    bool has_value;
+    uint32_t value;
+} optional_u32_t;
+
+bool tropic_get_ver(optional_u32_t *ver_out, uint16_t slot) {
+  uint32_t ver = 0;
+  uint16_t data_read_size = 0;
+  lt_ret_t ret = lt_r_mem_data_read_retry(&g_tropic_driver.handle, slot,
+                                          (uint8_t *)&ver, sizeof(ver), &data_read_size);
+  if (ret == LT_L3_R_MEM_DATA_READ_SLOT_EMPTY) {
+    ver_out->has_value = false;
+    return true;
+  } else if (ret != LT_OK) {
+    return false;
+  }
+  ver_out->has_value = true;
+  ver_out->value = ver;
+  return true;
+}
+
+bool get_expected_tropic_config_version(uint32_t *expected_ver_out) {
+  uint8_t batch_id[5] = {0};
+  if (!tropic_get_batch_id(batch_id)) {
+    return false;
+  }
+
+  if (!get_expected_tropic_config_version_from_batch_id(batch_id, expected_ver_out)) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * VERSION 0:
+ *  i_config:     vypnuté sensory (1), zapnutý maintenance bit (1)
+ *  min_r_config: zapnuté sensory (0), zapnutý maintenance bit (1)
+ *  max_r_config: zapnuté sensory (0), vypnutý maintenance bit (0)
+ *
+ * VERSION 1:
+ *  i_config:     zapnuté sensory (0), zapnutý maintenance bit (1)
+ *  min_r_config: zapnuté sensory (0), vypnutý maintenance bit (0)
+ *  max_r_config: zapnuté sensory (0), vypnutý maintenance bit (0)
+ *
+ *  na Trezorech teď je VERSION 0 min.
+ */
+bool get_expected_tropic_config_version_from_batch_id(const uint8_t *batch_id, uint32_t *expected_ver_out) {
+  for (size_t i = 0; i < sizeof(TROPIC_BATCHES_V1) / sizeof(TROPIC_BATCHES_V1[0]); i++) {
+    if (memcmp(batch_id, TROPIC_BATCHES_V1[i], sizeof(TROPIC_BATCHES_V1[0])) == 0) {
+      *expected_ver_out = 1;
+      return true;
+    }
+  }
+  *expected_ver_out = 0; // Default version
+  return true;
+}
+
+// TADY TO ZAČÍNÁ
+void tropic_set_config_main(void) {
+  uint32_t expected_ver = 0;
+  if (!get_expected_tropic_config_version(&expected_ver)) {
+    return;
+  }
+  optional_u32_t ver;
+  if (!tropic_get_ver(&ver, TROPIC_CONFIG_VERSION_SLOT)) {
+    return;
+  }
+  if (!ver.has_value) {
+    optional_u32_t bk_ver;
+    if (!tropic_get_ver(&bk_ver, TROPIC_CONFIG_BACKUP_VERSION_SLOT)) {
+      return;
+    }
+    if (bk_ver.has_value && bk_ver.value > expected_ver) {
+      ensure(0, "Backup config version is newer than expected. Aborting.");
+    }
+
+    set_config_from_none(expected_ver);
+    return;
+  }
+  if (ver.value < expected_ver) {
+    set_bk_ver_to_ver(ver); // 2. check bk_ver
+    set_config_upgrade(expected_ver);
+    return;
+  }
+  if (ver.value >= expected_ver) {
+    // Config is up to date or newer, no action needed
+    return;
+  }
+}
+
+bool set_bk_ver_to_ver(optional_u32_t ver) {  // tohle se dá optimalizovat
+  if (ver.has_value) {
+    lt_ret_t ret = lt_r_mem_data_erase_write_retry(
+        &g_tropic_driver.handle, TROPIC_CONFIG_BACKUP_VERSION_SLOT,
+        (uint8_t *)&ver.value, sizeof(ver.value)
+    );
+    if (ret != LT_OK) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool set_config_upgrade(uint32_t expected_ver) {
+  // update irev
+  // Předpokládám, že irev existuje **jenom jedna**
+  lt_config_t i_config = {0};
+  if (!get_i_config_from_ver(expected_ver, &i_config)) {
+    return false;
+  }
+  tropic_ensure_i_config(&i_config); // tohle už je existující funkce.
+
+  // update rev (každopádně)
+  lt_config_t min_r_config = {0};
+  if (!get_min_r_config_from_ver(expected_ver, &min_r_config)) {
+    return false;
+  }
+
+  lt_config_t current_r_config = {0};
+  if (lt_read_whole_R_config_retry(&g_tropic_driver.handle, &current_r_config) != LT_OK) { // tohle už je existující funkce.
+    return false;
+  }
+
+  // tady není kontrola, kdo je přísnější <= jsme na updatu číslo -> číslo => chceme to udělat
+  lt_config_t max_r_config = {0};
+  if (!get_max_r_config_from_ver(expected_ver, &max_r_config)) {
+    return false;
+  }
+  lt_r_mem_data_erase(&g_tropic_driver.handle, TROPIC_CONFIG_VERSION_SLOT); // tohle už je existující funkce.
+
+  lt_erase_and_write_R_config_retry(&g_tropic_driver.handle, &max_r_config); // tohle už je existující funkce.
+
+  lt_r_mem_data_write_retry(&g_tropic_driver.handle, TROPIC_CONFIG_VERSION_SLOT, (uint8_t *)&expected_ver, sizeof(expected_ver)); // tohle už je existující funkce.
+  lt_erase_r_mem_data(&g_tropic_driver.handle, TROPIC_CONFIG_BACKUP_VERSION_SLOT); // tohle už je existující funkce.
+  // set_bk_ver_to_ver(expected_ver); // tady se dá ještě zapsat ten backup ver, ale není to nutné
+}
+
+bool set_config_from_none(uint32_t expected_ver) {
+  // update irev
+  // Předpokládám, že irev existuje **jenom jedna**
+  lt_config_t i_config = {0};
+  if (!get_i_config_from_ver(expected_ver, &i_config)) {
+    return false;
+  }
+  tropic_ensure_i_config(&i_config); // tohle už je existující funkce.
+
+
+  // update rev (je-li nutné)
+  lt_config_t min_r_config = {0};
+  if (!get_min_r_config_from_ver(expected_ver, &min_r_config)) {
+    return false;
+  }
+
+  lt_config_t current_r_config = {0};
+  if (lt_read_whole_R_config_retry(&g_tropic_driver.handle, &current_r_config) != LT_OK) { // tohle už je existující funkce.
+    return false;
+  }
+
+  if (is_more_strict(&min_r_config, &current_r_config)) {
+    lt_config_t max_r_config = {0};
+    if (!get_max_r_config_from_ver(expected_ver, &max_r_config)) {
+      return false;
+    }
+    lt_r_mem_data_erase(&g_tropic_driver.handle, TROPIC_CONFIG_VERSION_SLOT); // tohle už je existující funkce.
+
+    lt_erase_and_write_R_config_retry(&g_tropic_driver.handle, &max_r_config); // tohle už je existující funkce.
+
+    lt_r_mem_data_write_retry(&g_tropic_driver.handle, TROPIC_CONFIG_VERSION_SLOT, (uint8_t *)&expected_ver, sizeof(expected_ver)); // tohle už je existující funkce.
+    lt_erase_r_mem_data(&g_tropic_driver.handle, TROPIC_CONFIG_BACKUP_VERSION_SLOT); // tohle už je existující funkce.
+    // set_bk_ver_to_ver(expected_ver); // tady se dá ještě zapsat ten backup ver, ale není to nutné
+  }
+}
+// TADY TO KONČÍ
