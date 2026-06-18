@@ -27,9 +27,6 @@
 #include "rand.h"
 #include "sha2.h"
 
-#define HASHLEN 32
-#define DHLEN 32
-
 #define NONCE_LIMIT 0xFFFFFFFFFFFFFFFFULL
 #define NONCE_ARRAY_SIZE_BYTES 12
 #define NOISE_TAG_SIZE_BYTES 16
@@ -71,16 +68,12 @@ static void ss_init(symmetric_state_t *ss, const uint8_t *protocol_name,
 
 static void ss_mix_hash(symmetric_state_t *ss, const uint8_t *data,
                         size_t len) {
-  uint8_t concat[HASHLEN + len];
-  memzero(concat, sizeof(concat));
-  memcpy(concat, ss->handshake_hash, HASHLEN);
-
-  if (len != 0 && data != NULL) {
-    memcpy(concat + HASHLEN, data, len);
-  }
-
-  sha256_Raw(concat, sizeof(concat), ss->handshake_hash);
-  memzero(concat, sizeof(concat));
+  SHA256_CTX context = {0};
+  sha256_Init(&context);
+  sha256_Update(&context, ss->handshake_hash, HASHLEN);
+  sha256_Update(&context, data, len);
+  sha256_Final(&context, ss->handshake_hash);
+  memzero(&context, sizeof(context));
 }
 
 static void hkdf3(uint8_t *chaining_key, size_t chaining_key_len, uint8_t *key,
@@ -151,14 +144,19 @@ static void ss_mix_key_and_hash(symmetric_state_t *ss,
 
   ss->cipher_state.has_key = true;
   ss->cipher_state.nonce = 0;
+  ss_mix_hash(ss, temp_h, HASHLEN);
   memzero(temp_h, sizeof(temp_h));  // Remove temp keys from stack
 }
 
-static void ss_ts_split(symmetric_state_t *ss, transport_state_t *ts) {
-  hkdf2(ss->chaining_key, HASHLEN, NULL, 0,
-        &ts->send_cipher_state.key,    // <- Output 1
-        &ts->receive_cipher_state.key  // <- Output 2
-  );
+static void ss_ts_split(symmetric_state_t *ss, transport_state_t *ts,
+                        bool initiator) {
+  if (initiator) {
+    hkdf2(ss->chaining_key, HASHLEN, NULL, 0, &ts->send_cipher_state.key,
+          &ts->receive_cipher_state.key);
+  } else {
+    hkdf2(ss->chaining_key, HASHLEN, NULL, 0, &ts->receive_cipher_state.key,
+          &ts->send_cipher_state.key);
+  }
 
   ts->send_cipher_state.has_key = true;
   ts->send_cipher_state.nonce = 0;
@@ -329,11 +327,17 @@ static bool ss_decrypt_and_hash(symmetric_state_t *ss, const uint8_t *enc_bytes,
   return status;
 }
 
-static void noise_xxpsk3_init_state(noise_xxpsk3_state_t *state,
+static bool noise_xxpsk3_init_state(noise_xxpsk3_state_t *state,
                                     const uint8_t psk[DHLEN],
-                                    const uint8_t static_private_key[DHLEN]) {
+                                    const uint8_t static_private_key[DHLEN],
+                                    const uint8_t *prologue,
+                                    size_t prologue_len) {
   static uint8_t XX_PROTOCOL_NAME[] = "Noise_XXpsk3_25519_AESGCM_SHA256";
-  static uint8_t prologue[] = "";
+
+  if ((prologue == NULL && prologue_len != 0) ||
+      prologue_len > NOISE_MAX_PAYLOAD_BYTES) {
+    return false;
+  }
 
   ss_init(&state->symmetric_state, XX_PROTOCOL_NAME,
           sizeof(XX_PROTOCOL_NAME) - 1);  // -1 substract the string terminator
@@ -341,8 +345,7 @@ static void noise_xxpsk3_init_state(noise_xxpsk3_state_t *state,
   memcpy(state->static_private, static_private_key, DHLEN);
   curve25519_scalarmult_basepoint(state->static_public, state->static_private);
 
-  ss_mix_hash(&state->symmetric_state, (uint8_t *)prologue,
-              sizeof(prologue) - 1);
+  ss_mix_hash(&state->symmetric_state, (uint8_t *)prologue, prologue_len);
 
   memcpy(state->psk, psk, DHLEN);
 
@@ -350,27 +353,34 @@ static void noise_xxpsk3_init_state(noise_xxpsk3_state_t *state,
   state->has_remote_ephemeral_public = false;
   state->has_remote_static_public = false;
   state->has_transport_state = false;
+  return true;
 }
+
+#ifdef USE_NOISE_RESPONDER
 
 bool noise_xxpsk3_responder_init(noise_xxpsk3_responder_t *rspn,
                                  const uint8_t psk[DHLEN],
                                  const uint8_t static_private_key[DHLEN]) {
-  if (rspn == NULL) {
-    return false;
-  }
-  if (rspn->initialized || psk == NULL || static_private_key == NULL) {
-    noise_xxpsk3_responder_deinit(rspn);
-    return false;
+  if (rspn == NULL || rspn->initialized || psk == NULL ||
+      static_private_key == NULL) {
+    goto cleanup;
   }
 
   // Clear the responder structure
   memzero(rspn, sizeof(noise_xxpsk3_responder_t));
 
-  noise_xxpsk3_init_state(&rspn->state, psk, static_private_key);
+  if (!noise_xxpsk3_init_state(&rspn->state, psk, static_private_key, NULL,
+                               0)) {
+    goto cleanup;
+  }
 
   rspn->handshake_stage = WAITING_FOR_REQUEST1;
   rspn->initialized = true;
   return true;
+
+cleanup:
+  noise_xxpsk3_responder_deinit(rspn);
+  return false;
 }
 
 void noise_xxpsk3_responder_deinit(noise_xxpsk3_responder_t *rspn) {
@@ -382,8 +392,8 @@ bool noise_xxpsk3_responder_handle_request1(noise_xxpsk3_responder_t *rspn,
                                             const uint8_t *msg,
                                             size_t msg_len) {
   if (!rspn->initialized || rspn->handshake_stage != WAITING_FOR_REQUEST1 ||
-      msg == NULL || msg_len != DHLEN) {
-    return false;
+      msg == NULL || msg_len < DHLEN + NOISE_TAG_SIZE_BYTES) {
+    goto cleanup;
   }
 
   noise_xxpsk3_state_t *state = &rspn->state;
@@ -391,76 +401,84 @@ bool noise_xxpsk3_responder_handle_request1(noise_xxpsk3_responder_t *rspn,
   memcpy(state->remote_ephemeral_public, msg, DHLEN);
   state->has_remote_ephemeral_public = true;
   ss_mix_hash(&state->symmetric_state, state->remote_ephemeral_public, DHLEN);
+  ss_mix_key(&state->symmetric_state, &state->remote_ephemeral_public);
 
-  // Message 1 payload is cleartext (no key yet); mix it into the hash.
-  ss_mix_hash(&state->symmetric_state, msg + DHLEN, msg_len - DHLEN);
+  // PSK mode established a key at the `e` token, so the payload is encrypted.
+  uint8_t payload[NOISE_MAX_PAYLOAD_BYTES];
+  if (!ss_decrypt_and_hash(&state->symmetric_state, msg + DHLEN, payload,
+                           msg_len - DHLEN)) {
+    goto cleanup;
+  }
 
   rspn->handshake_stage = READY_FOR_RESPONSE1;
   return true;
+
+cleanup:
+  noise_xxpsk3_responder_deinit(rspn);
+  return false;
 }
 
 bool noise_xxpsk3_responder_create_response1(
     noise_xxpsk3_responder_t *rspn, const uint8_t *payload, size_t payload_size,
     uint8_t *response, size_t max_response_size, size_t *response_size) {
   noise_xxpsk3_state_t *state = &rspn->state;
+  uint8_t input_key_material[DHLEN] = {0};
 
   if (!rspn->initialized || response == NULL || response_size == NULL ||
       rspn->handshake_stage != READY_FOR_RESPONSE1 ||
-      !state->has_remote_ephemeral_public) {
-    return false;
+      !state->has_remote_ephemeral_public ||
+      (payload == NULL && payload_size != 0)) {
+    goto cleanup;
   }
 
   // Check if response buffer is large enough to hold the response
   if (max_response_size <
       (2 * DHLEN + 2 * NOISE_TAG_SIZE_BYTES + payload_size)) {
-    return false;
+    goto cleanup;
   }
 
   if (payload_size > NOISE_MAX_PAYLOAD_BYTES) {
-    return false;
+    goto cleanup;
   }
 
   // Generate ephemeral keypair
-  uint8_t ephemeral_public[DHLEN];
-  generate_keypair(&state->ephemeral_private, &ephemeral_public);
+  generate_keypair(&state->ephemeral_private, (uint8_t (*)[DHLEN])response);
   state->has_ephemeral_private = true;
 
-  ss_mix_hash(&state->symmetric_state, ephemeral_public, DHLEN);
+  ss_mix_hash(&state->symmetric_state, response, DHLEN);
+  ss_mix_key(&state->symmetric_state, (uint8_t (*)[DHLEN])response);
 
-  uint8_t input_key_material[DHLEN] = {0};
   dh(&input_key_material, &state->ephemeral_private,
      &state->remote_ephemeral_public);
   ss_mix_key(&state->symmetric_state, &input_key_material);
 
-  // Encrypt public key
-  uint8_t encrypted_static_public[DHLEN + NOISE_TAG_SIZE_BYTES];
+  // Encrypt static public key
   if (!ss_encrypt_and_hash(&state->symmetric_state, state->static_public,
-                           encrypted_static_public, DHLEN)) {
-    return false;
+                           response + DHLEN, DHLEN)) {
+    goto cleanup;
   }
 
   dh(&input_key_material, &state->static_private,
      &state->remote_ephemeral_public);
   ss_mix_key(&state->symmetric_state, &input_key_material);
+  memzero(input_key_material, sizeof(input_key_material));
 
   // Encrypt payload
-  uint8_t encrypted_payload[NOISE_MAX_PAYLOAD_BYTES + NOISE_TAG_SIZE_BYTES];
-  if (!ss_encrypt_and_hash(&state->symmetric_state, payload, encrypted_payload,
+  if (!ss_encrypt_and_hash(&state->symmetric_state, payload,
+                           response + (2 * DHLEN + NOISE_TAG_SIZE_BYTES),
                            payload_size)) {
-    return false;
+    goto cleanup;
   }
-
-  // Concatenate all things into the message.
-  memcpy(response, ephemeral_public, DHLEN);
-  memcpy(response + DHLEN, encrypted_static_public,
-         DHLEN + NOISE_TAG_SIZE_BYTES);
-  memcpy(response + (2 * DHLEN + NOISE_TAG_SIZE_BYTES), encrypted_payload,
-         payload_size + NOISE_TAG_SIZE_BYTES);
 
   *response_size = 2 * DHLEN + 2 * NOISE_TAG_SIZE_BYTES + payload_size;
 
   rspn->handshake_stage = WAITING_FOR_REQUEST2;
   return true;
+
+cleanup:
+  memzero(input_key_material, sizeof(input_key_material));
+  noise_xxpsk3_responder_deinit(rspn);
+  return false;
 }
 
 bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
@@ -471,18 +489,18 @@ bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
   if (!rspn->initialized || msg == NULL ||
       rspn->handshake_stage != WAITING_FOR_REQUEST2 ||
       !state->has_ephemeral_private) {
-    return false;
+    goto cleanup;
   }
   // Check if message is large enough to contain the encrypted remote static
   // public key and at least empty encrypted payload (just NOISE_TAG)
   if (msg_len < (DHLEN + 2 * NOISE_TAG_SIZE_BYTES)) {
-    return false;
+    goto cleanup;
   }
 
   if (!ss_decrypt_and_hash(&state->symmetric_state, msg,
                            state->remote_static_public,  // <- Decrypt here
                            DHLEN + NOISE_TAG_SIZE_BYTES)) {
-    return false;
+    goto cleanup;
   }
 
   state->has_remote_static_public = true;
@@ -491,6 +509,7 @@ bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
   dh(&input_key_material, &state->ephemeral_private,
      &state->remote_static_public);
   ss_mix_key(&state->symmetric_state, &input_key_material);
+  memzero(input_key_material, sizeof(input_key_material));
 
   ss_mix_key_and_hash(&state->symmetric_state, &state->psk);
 
@@ -498,7 +517,7 @@ bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
 
   if (encrypted_payload_len >
       (NOISE_MAX_PAYLOAD_BYTES + NOISE_TAG_SIZE_BYTES)) {
-    return false;
+    goto cleanup;
   }
 
   uint8_t payload[NOISE_MAX_PAYLOAD_BYTES];
@@ -507,61 +526,51 @@ bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
                            msg + DHLEN + NOISE_TAG_SIZE_BYTES,
                            payload,  // <- Decrypt here
                            encrypted_payload_len)) {
-    return false;
+    goto cleanup;
   }
 
-  ss_ts_split(&state->symmetric_state, &state->transport_state);
+  ss_ts_split(&state->symmetric_state, &state->transport_state, false);
+
+  // Clean sensitive data from handler
+  memzero(state, sizeof(noise_xxpsk3_state_t) - sizeof(transport_state_t));
+
   state->has_transport_state = true;
   rspn->handshake_stage = RSPN_HANDSHAKE_COMPLETE;
   return true;
+
+cleanup:
+  noise_xxpsk3_responder_deinit(rspn);
+  return false;
 }
 
-bool noise_xxpsk3_responder_create_response2(
-    noise_xxpsk3_responder_t *rspn, const uint8_t *payload, size_t payload_size,
-    uint8_t *response, size_t max_response_size, size_t *response_size) {
-  noise_xxpsk3_state_t *state = &rspn->state;
+#endif  // USE_NOISE_RESPONDER
 
-  if (!rspn->initialized || rspn->handshake_stage != RSPN_HANDSHAKE_COMPLETE ||
-      !state->has_transport_state || payload == NULL || response == NULL ||
-      response_size == NULL) {
-    return false;
-  }
-  if (max_response_size < (payload_size + NOISE_TAG_SIZE_BYTES)) {
-    return false;
-  }
-  if (payload_size > NOISE_MAX_PAYLOAD_BYTES) {
-    return false;
-  }
-
-  if (!encrypt_with_ad(&state->transport_state.send_cipher_state, NULL, 0,
-                       payload, response, payload_size)) {
-    return false;
-  }
-
-  *response_size = payload_size + NOISE_TAG_SIZE_BYTES;
-  return true;
-}
+#ifdef USE_NOISE_INITIATOR
 
 bool noise_xxpsk3_initiator_init(noise_xxpsk3_initiator_t *intr,
                                  const uint8_t psk[DHLEN],
                                  const uint8_t static_private_key[DHLEN]) {
-  if (intr == NULL) {
-    return false;
+  if (intr == NULL || intr->initialized || psk == NULL ||
+      static_private_key == NULL) {
+    goto cleanup;
   }
 
-  if (intr->initialized || psk == NULL || static_private_key == NULL) {
-    noise_xxpsk3_initiator_deinit(intr);
-    return false;
-  }
   // Clear the initiator structure
   memzero(intr, sizeof(noise_xxpsk3_initiator_t));
 
-  noise_xxpsk3_init_state(&intr->state, psk, static_private_key);
+  if (!noise_xxpsk3_init_state(&intr->state, psk, static_private_key, NULL,
+                               0)) {
+    goto cleanup;
+  }
 
   intr->handshake_stage = READY_FOR_REQUEST1;
   intr->initialized = true;
 
   return true;
+
+cleanup:
+  noise_xxpsk3_initiator_deinit(intr);
+  return false;
 }
 
 void noise_xxpsk3_initiator_deinit(noise_xxpsk3_initiator_t *intr) {
@@ -573,40 +582,50 @@ bool noise_xxpsk3_initiator_create_request1(
     noise_xxpsk3_initiator_t *intr, const uint8_t *payload, size_t payload_size,
     uint8_t *request, size_t max_request_size, size_t *request_size) {
   if (!intr->initialized || intr->handshake_stage != READY_FOR_REQUEST1 ||
-      payload == NULL || request == NULL || request_size == NULL) {
-    return false;
+      (payload == NULL && payload_size != 0) || request == NULL ||
+      request_size == NULL) {
+    goto cleanup;
   }
-  if (max_request_size < (DHLEN + payload_size)) {
-    return false;
+  if (max_request_size < (DHLEN + payload_size + NOISE_TAG_SIZE_BYTES)) {
+    goto cleanup;
   }
 
   noise_xxpsk3_state_t *state = &intr->state;
 
   // Generate ephemeral keypair
-  uint8_t ephemeral_public[DHLEN];
-  generate_keypair(&state->ephemeral_private, &ephemeral_public);
+  generate_keypair(&state->ephemeral_private, (uint8_t (*)[DHLEN])request);
   state->has_ephemeral_private = true;
 
-  ss_mix_hash(&state->symmetric_state, ephemeral_public, DHLEN);
-  memcpy(request, ephemeral_public, DHLEN);
+  ss_mix_hash(&state->symmetric_state, request, DHLEN);
+  ss_mix_key(&state->symmetric_state, (uint8_t (*)[DHLEN])request);
 
-  ss_mix_hash(&state->symmetric_state, payload, payload_size);
-  memcpy(request + DHLEN, payload, payload_size);
+  // PSK mode established a key at the `e` token, so the payload is encrypted.
+  if (!ss_encrypt_and_hash(&state->symmetric_state, payload, request + DHLEN,
+                           payload_size)) {
+    goto cleanup;
+  }
 
-  *request_size = DHLEN + payload_size;
+  *request_size = DHLEN + payload_size + NOISE_TAG_SIZE_BYTES;
   intr->handshake_stage = WAITING_FOR_RESPONSE1;
   return true;
+
+cleanup:
+  noise_xxpsk3_initiator_deinit(intr);
+  return false;
 }
+
 bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
                                              const uint8_t *msg, size_t msg_len,
                                              uint8_t *payload,
                                              size_t *payload_size) {
+  uint8_t input_key_material[DHLEN] = {0};
+
   if (!intr->initialized || intr->handshake_stage != WAITING_FOR_RESPONSE1 ||
-      msg == NULL) {
-    return false;
+      msg == NULL || payload == NULL || payload_size == NULL) {
+    goto cleanup;
   }
   if (msg_len < 2 * DHLEN + 2 * NOISE_TAG_SIZE_BYTES) {
-    return false;
+    goto cleanup;
   }
 
   noise_xxpsk3_state_t *state = &intr->state;
@@ -614,18 +633,16 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
   memcpy(state->remote_ephemeral_public, msg, DHLEN);
   state->has_remote_ephemeral_public = true;
   ss_mix_hash(&state->symmetric_state, state->remote_ephemeral_public, DHLEN);
+  ss_mix_key(&state->symmetric_state, &state->remote_ephemeral_public);
 
-  uint8_t input_key_material[DHLEN] = {0};
   dh(&input_key_material, &state->ephemeral_private,
      &state->remote_ephemeral_public);
   ss_mix_key(&state->symmetric_state, &input_key_material);
 
-  uint8_t encrypted_static_public[DHLEN + NOISE_TAG_SIZE_BYTES];
-  memcpy(encrypted_static_public, msg + DHLEN, DHLEN + NOISE_TAG_SIZE_BYTES);
-  if (!ss_decrypt_and_hash(&state->symmetric_state, encrypted_static_public,
+  if (!ss_decrypt_and_hash(&state->symmetric_state, msg + DHLEN,
                            state->remote_static_public,  // <- Decrypt here
                            DHLEN + NOISE_TAG_SIZE_BYTES)) {
-    return false;
+    goto cleanup;
   }
   state->has_remote_static_public = true;
 
@@ -637,54 +654,118 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
   if (!ss_decrypt_and_hash(&state->symmetric_state,
                            msg + (2 * DHLEN + NOISE_TAG_SIZE_BYTES), payload,
                            msg_len - (2 * DHLEN + NOISE_TAG_SIZE_BYTES))) {
-    return false;
+    goto cleanup;
   }
 
+  memzero(input_key_material, sizeof(input_key_material));
   *payload_size = msg_len - (2 * DHLEN + 2 * NOISE_TAG_SIZE_BYTES);
 
   intr->handshake_stage = READY_FOR_REQUEST2;
 
   return true;
+
+cleanup:
+  memzero(input_key_material, sizeof(input_key_material));
+  noise_xxpsk3_initiator_deinit(intr);
+  return false;
 }
 
 bool noise_xxpsk3_initiator_create_request2(
     noise_xxpsk3_initiator_t *intr, const uint8_t *payload, size_t payload_size,
     uint8_t *request, size_t max_request_size, size_t *request_size) {
   if (!intr->initialized || intr->handshake_stage != READY_FOR_REQUEST2 ||
-      payload == NULL || request == NULL || request_size == NULL) {
-    return false;
+      (payload == NULL && payload_size != 0) || request == NULL ||
+      request_size == NULL) {
+    goto cleanup;
   }
 
   if (max_request_size < (DHLEN + 2 * NOISE_TAG_SIZE_BYTES + payload_size)) {
-    return false;
+    goto cleanup;
   }
 
   noise_xxpsk3_state_t *state = &intr->state;
 
   if (!ss_encrypt_and_hash(&state->symmetric_state, state->static_public,
                            request, DHLEN)) {
-    return false;
+    goto cleanup;
   }
 
   uint8_t input_key_material[DHLEN] = {0};
   dh(&input_key_material, &state->static_private,
      &state->remote_ephemeral_public);
   ss_mix_key(&state->symmetric_state, &input_key_material);
+  memzero(input_key_material, sizeof(input_key_material));
 
   ss_mix_key_and_hash(&state->symmetric_state, &state->psk);
 
   if (!ss_encrypt_and_hash(&state->symmetric_state, payload,
                            request + DHLEN + NOISE_TAG_SIZE_BYTES,
                            payload_size)) {
-    return false;
+    goto cleanup;
   }
 
   *request_size = DHLEN + 2 * NOISE_TAG_SIZE_BYTES + payload_size;
 
-  ss_ts_split(&state->symmetric_state, &state->transport_state);
+  ss_ts_split(&state->symmetric_state, &state->transport_state, true);
+  memzero(state, sizeof(noise_xxpsk3_state_t) - sizeof(transport_state_t));
   state->has_transport_state = true;
 
   intr->handshake_stage = INTR_HANDSHAKE_COMPLETE;
 
+  return true;
+
+cleanup:
+  noise_xxpsk3_initiator_deinit(intr);
+  return false;
+}
+
+#endif  // USE_NOISE_INITIATOR
+
+bool noise_xxpsk3_send_message(transport_state_t *ts, const uint8_t *payload,
+                               size_t payload_size, uint8_t *ciphertext,
+                               size_t max_ciphertext_size,
+                               size_t *ciphertext_size) {
+  if (ts == NULL || (payload == NULL && payload_size != 0) ||
+      ciphertext == NULL || ciphertext_size == NULL) {
+    return false;
+  }
+  if (payload_size > NOISE_MAX_PAYLOAD_BYTES) {
+    return false;
+  }
+  if (max_ciphertext_size < payload_size + NOISE_TAG_SIZE_BYTES) {
+    return false;
+  }
+
+  if (!encrypt_with_ad(&ts->send_cipher_state, NULL, 0, payload, ciphertext,
+                       payload_size)) {
+    return false;
+  }
+
+  *ciphertext_size = payload_size + NOISE_TAG_SIZE_BYTES;
+  return true;
+}
+
+bool noise_xxpsk3_receive_message(transport_state_t *ts,
+                                  const uint8_t *ciphertext,
+                                  size_t ciphertext_size, uint8_t *payload,
+                                  size_t max_payload_size,
+                                  size_t *payload_size) {
+  if (ts == NULL || ciphertext == NULL || payload == NULL ||
+      payload_size == NULL) {
+    return false;
+  }
+  if (ciphertext_size < NOISE_TAG_SIZE_BYTES) {
+    return false;
+  }
+  if (ciphertext_size > max_payload_size + NOISE_TAG_SIZE_BYTES) {
+    return false;
+  }
+
+  if (!decrypt_with_ad(&ts->receive_cipher_state, NULL, 0, ciphertext, payload,
+                       ciphertext_size)) {
+    return false;
+  }
+
+  *payload_size = ciphertext_size - NOISE_TAG_SIZE_BYTES;
   return true;
 }

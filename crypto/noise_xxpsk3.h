@@ -70,12 +70,11 @@ typedef struct {
 
 #ifdef USE_NOISE_RESPONDER
 
-/* TODO: think about giving those states some 32bit random numbers */
 typedef enum {
-  WAITING_FOR_REQUEST1,
-  READY_FOR_RESPONSE1,
-  WAITING_FOR_REQUEST2,
-  RSPN_HANDSHAKE_COMPLETE
+  WAITING_FOR_REQUEST1 = 0x5091d95c,
+  READY_FOR_RESPONSE1 = 0x252d533a,
+  WAITING_FOR_REQUEST2 = 0xe3b601eb,
+  RSPN_HANDSHAKE_COMPLETE = 0x54acac08
 } responder_handshake_stage_t;
 
 typedef struct {
@@ -89,10 +88,10 @@ typedef struct {
 #ifdef USE_NOISE_INITIATOR
 
 typedef enum {
-  READY_FOR_REQUEST1,
-  WAITING_FOR_RESPONSE1,
-  READY_FOR_REQUEST2,
-  INTR_HANDSHAKE_COMPLETE
+  READY_FOR_REQUEST1 = 0x24a23a5e,
+  WAITING_FOR_RESPONSE1 = 0xa748a792,
+  READY_FOR_REQUEST2 = 0xba244240,
+  INTR_HANDSHAKE_COMPLETE = 0xf149f042
 } initiator_handshake_stage_t;
 
 typedef struct {
@@ -232,8 +231,6 @@ bool noise_xxpsk3_initiator_create_request2(
  * 4. noise_xxpsk3_responder_handle_request2() - to handle the second message
  * from the initiator, which includes the initiator's encrypted static public
  * key, completing the handshake
- * 5. noise_xxpsk3_responder_create_response2() - to send the first encrypted
- * transport message back to the initiator
  *
  * Incorrect usage of the functions or incorrect message formats will lead to a
  * false status being returned and the caller should handle it accordingly (e.g.
@@ -319,25 +316,42 @@ bool noise_xxpsk3_responder_create_response1(
 bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
                                             const uint8_t *msg, size_t msg_len);
 
-/**
- * @brief Create response to the second handshake message (first transport
- * message).
- *
- * In:    Response plain payload
- * Out:   Response message format:
- * <encrypted_payload[payload_size + 16B]>
- *
- * @param rspn Pointer to the responder structure
- * @param payload Plain payload to send
- * @param payload_size Length of the payload in bytes
- * @param response Output buffer for the response message
- * @param response_buf_size Size of the output buffer
- * @param response_size Set to the number of bytes written to the response
- * buffer
- * @return true if the response was created correctly, false otherwise
- */
-bool noise_xxpsk3_responder_create_response2(
-    noise_xxpsk3_responder_t *rspn, const uint8_t *payload, size_t payload_size,
-    uint8_t *response, size_t response_buf_size, size_t *response_size);
-
 #endif /* USE_NOISE_RESPONDER */
+
+/**
+ * @brief Encrypt a transport message on the send cipher state.
+ *
+ * @param ts Pointer to the established transport state
+ * @param payload Plaintext to encrypt (may be empty)
+ * @param payload_size Length of the plaintext in bytes
+ * @param ciphertext Output buffer for the encrypted message
+ * @param max_ciphertext_size Size of the output buffer; must be at least
+ * payload_size + 16
+ * @param ciphertext_size Set to the number of bytes written
+ * (payload_size + 16)
+ * @return true if the message was encrypted correctly, false otherwise
+ */
+bool noise_xxpsk3_send_message(transport_state_t *ts, const uint8_t *payload,
+                               size_t payload_size, uint8_t *ciphertext,
+                               size_t max_ciphertext_size,
+                               size_t *ciphertext_size);
+
+/**
+ * @brief Decrypt a transport message on the receive cipher state.
+ *
+ * @param ts Pointer to the established transport state
+ * @param ciphertext Encrypted message to decrypt
+ * @param ciphertext_size Length of the encrypted message; must be at least 16
+ * @param payload Output buffer for the decrypted plaintext
+ * @param max_payload_size Size of the output buffer; must be at least
+ * ciphertext_size - 16
+ * @param payload_size Set to the number of decrypted plaintext bytes
+ * (ciphertext_size - 16)
+ * @return true if the message was decrypted and authenticated correctly, false
+ * otherwise
+ */
+bool noise_xxpsk3_receive_message(transport_state_t *ts,
+                                  const uint8_t *ciphertext,
+                                  size_t ciphertext_size, uint8_t *payload,
+                                  size_t max_payload_size,
+                                  size_t *payload_size);
