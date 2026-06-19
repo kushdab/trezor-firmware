@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 
 import storage.device as storage_device
 import trezorui_api
-from trezor import TR, utils
+from trezor import TR, utils, workflow
 from trezor.enums import ButtonRequestType, DisplayRotation
 from trezor.ui.layouts import confirm_action
 from trezor.wire import DataError, high_speed
@@ -32,7 +32,10 @@ async def _load_homescreen(length: int) -> bytearray:
     loader = progress()
 
     buf = utils.empty_bytearray(length)
-    await chunked.get_all_chunks(buf, length, report=loader.report)
+    try:
+        await chunked.get_all_chunks(buf, length, report=loader.report)
+    finally:
+        workflow.close_others()
     return buf
 
 
@@ -98,10 +101,7 @@ async def apply_settings(msg: ApplySettings) -> Success:
     if homescreen is not None:
         _validate_homescreen(homescreen)
         await _require_confirm_change_homescreen(homescreen)
-        try:
-            storage_device.set_homescreen(homescreen)
-        except ValueError:
-            raise DataError("Invalid homescreen")
+        storage_device.set_homescreen(homescreen)
 
     if label is not None:
         if len(label) > storage_device.LABEL_MAXLENGTH:

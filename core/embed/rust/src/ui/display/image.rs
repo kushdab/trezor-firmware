@@ -56,7 +56,7 @@ impl ToifInfo {
     pub const HEADER_LENGTH: usize = 12;
 
     pub fn parse(image: BinaryData) -> Option<Self> {
-        if image.read_u8(0)? != b'T' && image.read_u8(1)? != b'O' && image.read_u8(2)? != b'I' {
+        if image.read_u8(0)? != b'T' || image.read_u8(1)? != b'O' || image.read_u8(2)? != b'I' {
             return None;
         }
 
