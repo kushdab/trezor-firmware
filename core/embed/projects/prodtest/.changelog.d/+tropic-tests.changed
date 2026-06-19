@@ -1,0 +1,1 @@
+Replace `tropic-stress-test` with focused `tropic-stress-*` and `tropic-test-*` commands that also check operation results.
