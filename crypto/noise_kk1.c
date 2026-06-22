@@ -358,5 +358,6 @@ bool noise_kk1_handle_handshake_response_multiple_keys(
       return true;
     }
   }
+  memzero(ephemeral_key_backup, sizeof(ephemeral_key_backup));
   return false;
 }
