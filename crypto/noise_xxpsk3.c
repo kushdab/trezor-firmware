@@ -337,7 +337,7 @@ static bool noise_xxpsk3_init_state(noise_xxpsk3_state_t *state,
                                     const uint8_t static_private_key[DHLEN],
                                     const uint8_t *prologue,
                                     size_t prologue_len) {
-  static uint8_t XX_PROTOCOL_NAME[] = "Noise_XXpsk3_25519_AESGCM_SHA256";
+  static const uint8_t XX_PROTOCOL_NAME[] = "Noise_XXpsk3_25519_AESGCM_SHA256";
 
   if ((prologue == NULL && prologue_len != 0) ||
       prologue_len > NOISE_MAX_PAYLOAD_BYTES) {
