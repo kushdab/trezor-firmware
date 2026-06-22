@@ -117,15 +117,14 @@ parse_partition_info() {
 }
 
 # Verify the active nRF Connect SDK / toolchain match the target board before
-# building. Each board is pinned to one SDK: t3w1 -> NCS 2.9 (west-ncs2.9.yml),
-# picodk/nRF54L -> NCS 3.3 (west.yml, default). Building with the wrong SDK or
-# toolchain active produces confusing, hard-to-diagnose failures.
+# building. Each board is pinned to one SDK: t3w1 -> NCS 2.9 (west-ncs2.9.yml).
+# Building with the wrong SDK or toolchain active produces confusing,
+# hard-to-diagnose failures.
 verify_environment() {
     local board="$1"
     local required_major expected_manifest
     case "$board" in
         t3w1*)   required_major=2; expected_manifest="west-ncs2.9.yml" ;;
-        picodk*) required_major=3; expected_manifest="west.yml" ;;
         *)
             echo "verify: board '$board' has no known SDK pairing; skipping SDK/toolchain check."
             return 0
