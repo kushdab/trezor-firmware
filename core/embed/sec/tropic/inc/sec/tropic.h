@@ -42,8 +42,10 @@
 #define TROPIC_DEVICE_CERT_SLOT_COUNT 3
 #define TROPIC_DEVICE_KEY_SLOT 0  // ECC_SLOT_0
 
-// Slot reserved for the version of Tropic configuration
-#define TROPIC_CONFIG_VERSION_SLOT 6
+// Slot reserved for the version of Tropic configuration.
+#define TROPIC_CONFIG_DISTRIBUTION_VERSION_SLOT 6
+// Slot reserved for the backup distribution version of Tropic configuration.
+#define TROPIC_CONFIG_BACKUP_DISTRIBUTION_VERSION_SLOT 7
 
 // Pairing key used by prodtest to inject the privileged and unprivileged
 // pairing keys.
@@ -100,16 +102,21 @@ lt_ret_t lt_mac_and_destroy_retry(lt_handle_t* tropic_handle,
 lt_ret_t lt_read_whole_R_config_retry(lt_handle_t* tropic_handle,
                                       struct lt_config_t* config);
 
+lt_ret_t lt_read_whole_I_config_retry(lt_handle_t* tropic_handle,
+                                      struct lt_config_t* config);
+
 lt_ret_t lt_erase_and_write_R_config_retry(lt_handle_t* tropic_handle,
                                            const struct lt_config_t* config);
+
+bool tropic_get_config_from_versioned_configs(
+    const tropic_versioned_config_t* configs, size_t config_count,
+    uint32_t config_version, const struct lt_config_t** config_out);
 
 #endif  // TREZOR_PRODTEST
 
 #endif  // KERNEL_MODE
 
 secbool tropic_ensure_configuration(void);
-
-secbool tropic_get_configuration(const uint8_t* batch_id, tropic_config_t* config);
 
 typedef secbool (*tropic_ui_progress_t)(void);
 

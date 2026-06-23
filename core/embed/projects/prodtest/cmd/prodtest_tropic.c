@@ -53,6 +53,11 @@ typedef enum {
                              // be called
 } tropic_handshake_state_t;
 
+typedef struct {
+  const struct lt_config_t* reversible;
+  const struct lt_config_t* irreversible;
+} prodtest_tropic_config_t;
+
 static tropic_handshake_state_t g_tropic_handshake_state =
     TROPIC_HANDSHAKE_STATE_0;
 
@@ -165,19 +170,32 @@ static void prodtest_tropic_lock_check(cli_t* cli) {
   }
 }
 
-static tropic_config_t prodtest_tropic_get_configuration(cli_t* cli) {
-  lt_chip_id_t chip_id = {0};
-  lt_ret_t ret = lt_get_info_chip_id(tropic_get_handle(), &chip_id);
-  if (ret != LT_OK) {
-    cli_error(cli, CLI_ERROR, "lt_get_info_chip_id() failed with error '%s'",
-              lt_ret_verbose(ret));
+static bool prodtest_tropic_get_configuration(
+    cli_t* cli, prodtest_tropic_config_t* config) {
+  if (config == NULL) {
+    cli_error(cli, CLI_ERROR, "Invalid config output.");
+    return false;
   }
 
-  tropic_config_t config = {0};
-  if (!tropic_get_configuration(chip_id.batch_id, &config)) {
-    cli_error(cli, CLI_ERROR, "tropic_get_configuration() failed");
+  if (!tropic_get_config_from_versioned_configs(
+          tropic_reversible_configs, tropic_reversible_config_count,
+          tropic_prodtest_config_distribution.reversible_version,
+          &config->reversible)) {
+    cli_error(cli, CLI_ERROR,
+              "Prodtest reversible configuration version not found.");
+    return false;
   }
-  return config;
+
+  if (!tropic_get_config_from_versioned_configs(
+          tropic_irreversible_configs, tropic_irreversible_config_count,
+          tropic_prodtest_config_distribution.irreversible_version,
+          &config->irreversible)) {
+    cli_error(cli, CLI_ERROR,
+              "Prodtest irreversible configuration version not found.");
+    return false;
+  }
+
+  return true;
 }
 
 tropic_locked_status get_tropic_locked_status(cli_t* cli) {
@@ -207,58 +225,42 @@ tropic_locked_status get_tropic_locked_status(cli_t* cli) {
     }
   }
 
-  tropic_config_t config = prodtest_tropic_get_configuration(cli);
+  prodtest_tropic_config_t config = {0};
+  if (!prodtest_tropic_get_configuration(cli, &config)) {
+    return TROPIC_LOCKED_ERROR;
+  }
 
   struct lt_config_t configuration_read = {0};
 
-  ret = lt_read_whole_R_config(tropic_handle, &configuration_read);
+  ret = lt_read_whole_R_config_retry(tropic_handle, &configuration_read);
   if (ret != LT_OK) {
     cli_error(cli, CLI_ERROR,
-              "`lt_read_whole_R_config()` failed with error '%s'",
+              "`lt_read_whole_R_config_retry()` failed with error '%s'",
               lt_ret_verbose(ret));
     return TROPIC_LOCKED_ERROR;
   }
 
-  if (memcmp(&config.reversible, (uint8_t*)&configuration_read,
-             sizeof(config.reversible)) != 0) {
+  if (memcmp(config.reversible, (uint8_t*)&configuration_read,
+             sizeof(*config.reversible)) != 0) {
     cli_trace(cli,
               "The reversible configuration read does not match the expected "
               "reversible configuration.");
     return TROPIC_LOCKED_FALSE;
   }
 
-  ret = lt_read_whole_I_config(tropic_handle, &configuration_read);
+  ret = lt_read_whole_I_config_retry(tropic_handle, &configuration_read);
   if (ret != LT_OK) {
     cli_error(cli, CLI_ERROR,
-              "`lt_read_whole_I_config()` failed with error '%s'",
+              "`lt_read_whole_I_config_retry()` failed with error '%s'",
               lt_ret_verbose(ret));
     return TROPIC_LOCKED_ERROR;
   }
 
-  if (memcmp(&config.irreversible, (uint8_t*)&configuration_read,
-             sizeof(config.irreversible)) != 0) {
+  if (memcmp(config.irreversible, (uint8_t*)&configuration_read,
+             sizeof(*config.irreversible)) != 0) {
     cli_trace(cli,
               "The irreversible configuration read does not match the expected "
               "irreversible configuration.");
-    return TROPIC_LOCKED_FALSE;
-  }
-
-  uint8_t read_value = 0;
-  uint16_t read_length = 0;
-  ret = lt_r_mem_data_read(tropic_get_handle(), TROPIC_CONFIG_VERSION_SLOT,
-                           &read_value, sizeof(read_value), &read_length);
-  if (ret == LT_L3_R_MEM_DATA_READ_SLOT_EMPTY) {
-    cli_trace(cli, "Config version slot is empty.");
-    return TROPIC_LOCKED_FALSE;
-  }
-  if (ret != LT_OK) {
-    cli_error(cli, CLI_ERROR, "`lt_r_mem_data_read()` failed with error '%s'",
-              lt_ret_verbose(ret));
-    return TROPIC_LOCKED_ERROR;
-  }
-  uint8_t config_version = config.version;
-  if (read_length != sizeof(config_version) || read_value != config_version) {
-    cli_trace(cli, "Config version mismatch.");
     return TROPIC_LOCKED_FALSE;
   }
 
@@ -802,7 +804,10 @@ static void prodtest_tropic_lock(cli_t* cli) {
     return;
   }
 
-  tropic_config_t config = prodtest_tropic_get_configuration(cli);
+  prodtest_tropic_config_t config = {0};
+  if (!prodtest_tropic_get_configuration(cli, &config)) {
+    return;
+  }
 
   struct lt_config_t configuration_read = {0};
   lt_handle_t* tropic_handle = tropic_get_handle();
@@ -814,7 +819,7 @@ static void prodtest_tropic_lock(cli_t* cli) {
     return;
   }
 
-  ret = lt_write_whole_R_config(tropic_handle, &config.reversible);
+  ret = lt_write_whole_R_config(tropic_handle, config.reversible);
   if (ret != LT_OK) {
     cli_error(cli, CLI_ERROR,
               "`lt_write_whole_R_config()` failed with error '%s'",
@@ -830,13 +835,13 @@ static void prodtest_tropic_lock(cli_t* cli) {
     return;
   }
 
-  if (memcmp(&config.reversible, (uint8_t*)&configuration_read,
-             sizeof(config.reversible)) != 0) {
+  if (memcmp(config.reversible, (uint8_t*)&configuration_read,
+             sizeof(*config.reversible)) != 0) {
     cli_error(cli, CLI_ERROR, "Reversible configuration mismatch after write.");
     return;
   }
 
-  ret = lt_write_whole_I_config(tropic_handle, &config.irreversible);
+  ret = lt_write_whole_I_config(tropic_handle, config.irreversible);
   if (ret != LT_OK) {
     cli_error(cli, CLI_ERROR,
               "`lt_write_whole_I_config()` failed with error '%s'",
@@ -844,44 +849,18 @@ static void prodtest_tropic_lock(cli_t* cli) {
     return;
   }
 
-  ret = lt_read_whole_I_config(tropic_handle, &configuration_read);
+  ret = lt_read_whole_I_config_retry(tropic_handle, &configuration_read);
   if (ret != LT_OK) {
     cli_error(cli, CLI_ERROR,
-              "`lt_read_whole_I_config()` failed with error '%s'",
+              "`lt_read_whole_I_config_retry()` failed with error '%s'",
               lt_ret_verbose(ret));
     return;
   }
 
-  if (memcmp(&config.irreversible, (uint8_t*)&configuration_read,
-             sizeof(config.irreversible)) != 0) {
+  if (memcmp(config.irreversible, (uint8_t*)&configuration_read,
+             sizeof(*config.irreversible)) != 0) {
     cli_error(cli, CLI_ERROR,
               "Irreversible configuration mismatch after write.");
-    return;
-  }
-
-  uint8_t config_version = config.version;
-  ret = lt_r_mem_data_write(tropic_get_handle(), TROPIC_CONFIG_VERSION_SLOT,
-                            &config_version, sizeof(config_version));
-  if (ret != LT_OK) {
-    cli_error(cli, CLI_ERROR, "`lt_r_mem_data_write()` failed with error %s",
-              lt_ret_verbose(ret));
-    return;
-  }
-
-  uint8_t read_value = 0;
-  uint16_t read_length = 0;
-  ret = lt_r_mem_data_read(tropic_get_handle(), TROPIC_CONFIG_VERSION_SLOT,
-                           &read_value, sizeof(read_value), &read_length);
-  if (ret != LT_OK) {
-    cli_error(cli, CLI_ERROR, "`lt_r_mem_data_read()` failed with error %s",
-              lt_ret_verbose(ret));
-    return;
-  }
-
-  if (read_length != sizeof(config_version) || read_value != config_version) {
-    cli_error(cli, CLI_ERROR,
-              "Config version mismatch after write. Expected %d, got %d.",
-              config_version, read_value);
     return;
   }
 
@@ -1675,9 +1654,10 @@ static void prodtest_tropic_read_configs(cli_t* cli) {
 
   // read irreversible configuration
   struct lt_config_t i_config = {0};
-  ret = lt_read_whole_I_config(tropic_handle, &i_config);
+  ret = lt_read_whole_I_config_retry(tropic_handle, &i_config);
   if (ret != LT_OK) {
-    cli_error(cli, CLI_ERROR, "`lt_read_whole_I_config()` failed with error %s",
+    cli_error(cli, CLI_ERROR,
+              "`lt_read_whole_I_config_retry()` failed with error %s",
               lt_ret_verbose(ret));
     return;
   }
@@ -1690,22 +1670,46 @@ static void prodtest_tropic_read_configs(cli_t* cli) {
   }
 
   cli_trace(cli, "");
-  cli_trace(cli, "=== Configuration Version ===");
-  uint8_t read_value = 0;
+  cli_trace(cli, "=== Configuration Distribution Version ===");
+  uint32_t read_value = 0;
   uint16_t read_length = 0;
-  ret = lt_r_mem_data_read(tropic_get_handle(), TROPIC_CONFIG_VERSION_SLOT,
-                           &read_value, sizeof(read_value), &read_length);
-  if (ret != LT_OK) {
+  ret = lt_r_mem_data_read(
+      tropic_get_handle(), TROPIC_CONFIG_DISTRIBUTION_VERSION_SLOT,
+      (uint8_t*)&read_value, sizeof(read_value), &read_length);
+  if (ret == LT_L3_R_MEM_DATA_READ_SLOT_EMPTY) {
+    cli_trace(cli, "Configuration distribution version: empty");
+  } else if (ret != LT_OK) {
     cli_error(cli, CLI_ERROR, "`lt_r_mem_data_read()` failed with error %s",
               lt_ret_verbose(ret));
     return;
-  }
-  if (read_length != 1) {
+  } else if (read_length != sizeof(read_value)) {
     cli_error(cli, CLI_ERROR,
-              "Unexpected length of configuration version data");
+              "Unexpected length of configuration distribution version data");
     return;
+  } else {
+    cli_trace(cli, "Configuration distribution version: %lu",
+              (unsigned long)read_value);
   }
-  cli_trace(cli, "Configuration version: %d", read_value);
+  read_value = 0;
+  read_length = 0;
+  ret = lt_r_mem_data_read(
+      tropic_get_handle(), TROPIC_CONFIG_BACKUP_DISTRIBUTION_VERSION_SLOT,
+      (uint8_t*)&read_value, sizeof(read_value), &read_length);
+  if (ret == LT_L3_R_MEM_DATA_READ_SLOT_EMPTY) {
+    cli_trace(cli, "Configuration backup distribution version: empty");
+  } else if (ret != LT_OK) {
+    cli_error(cli, CLI_ERROR, "`lt_r_mem_data_read()` failed with error %s",
+              lt_ret_verbose(ret));
+    return;
+  } else if (read_length != sizeof(read_value)) {
+    cli_error(
+        cli, CLI_ERROR,
+        "Unexpected length of configuration backup distribution version data");
+    return;
+  } else {
+    cli_trace(cli, "Configuration backup distribution version: %lu",
+              (unsigned long)read_value);
+  }
 
   cli_ok(cli, "");
 }

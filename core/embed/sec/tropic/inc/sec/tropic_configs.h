@@ -22,10 +22,30 @@
 #include <libtropic.h>
 
 typedef struct {
-  uint8_t version;
-  struct lt_config_t irreversible;
-  struct lt_config_t reversible;
-} tropic_config_t;
+  uint32_t version;
+  struct lt_config_t config;
+} tropic_versioned_config_t;
 
-extern const size_t tropic_config_count;
-extern const tropic_config_t tropic_configs[];
+typedef struct {
+  uint32_t distribution_version;
+  uint32_t min_reversible_version;
+  uint32_t max_reversible_version;
+  uint32_t irreversible_version;
+} tropic_config_distribution_t;
+
+typedef struct {
+  uint32_t reversible_version;
+  uint32_t irreversible_version;
+} tropic_prodtest_config_distribution_t;
+
+extern const tropic_versioned_config_t tropic_irreversible_configs[];
+extern const size_t tropic_irreversible_config_count;
+
+extern const tropic_versioned_config_t tropic_reversible_configs[];
+extern const size_t tropic_reversible_config_count;
+
+extern const tropic_config_distribution_t tropic_config_distributions[];
+extern const size_t tropic_config_distribution_count;
+
+extern const tropic_prodtest_config_distribution_t
+    tropic_prodtest_config_distribution;
