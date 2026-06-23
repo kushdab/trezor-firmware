@@ -1,3 +1,5 @@
+use core::hint::black_box;
+
 use crate::error::value_error;
 
 pub mod aesgcm;
@@ -44,7 +46,7 @@ fn consteq<const N: usize>(a: &[u8; N], b: &[u8; N]) -> bool {
     for i in 0..N {
         diff |= a[i] ^ b[i];
     }
-    diff == 0
+    black_box(black_box(diff) == 0)
 }
 
 #[cfg(test)]

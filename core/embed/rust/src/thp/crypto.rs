@@ -59,12 +59,12 @@ impl DH for TrezorCryptoCurve25519 {
         curve25519::Scalar::generate()
     }
 
-    fn pubkey(scalar: &Self::Key) -> Self::Pubkey {
-        curve25519::Point::from_secret(scalar)
+    fn pubkey(privkey: &Self::Key) -> Self::Pubkey {
+        curve25519::Point::from_secret(privkey)
     }
 
-    fn dh(scalar: &Self::Key, point: &Self::Pubkey) -> Result<Self::Output, ()> {
-        Ok(point.multiply(scalar))
+    fn dh(privkey: &Self::Key, pubkey: &Self::Pubkey) -> Result<Self::Output, ()> {
+        Ok(pubkey.multiply(privkey))
     }
 }
 
@@ -73,6 +73,13 @@ pub struct TrezorCryptoAesGcm;
 impl TrezorCryptoAesGcm {
     const KEY_SIZE: usize = 32;
     const NONCE_SIZE: usize = 12;
+
+    fn full_nonce(nonce_counter: u64) -> [u8; Self::NONCE_SIZE] {
+        let mut full_nonce = [0u8; Self::NONCE_SIZE];
+        full_nonce[4..].copy_from_slice(&nonce_counter.to_be_bytes());
+        assert_eq!(&full_nonce[0..4], &[0u8; 4]);
+        full_nonce
+    }
 }
 
 impl Cipher for TrezorCryptoAesGcm {
@@ -85,9 +92,7 @@ impl Cipher for TrezorCryptoAesGcm {
     fn encrypt(key: &Self::Key, nonce: u64, ad: &[u8], plaintext: &[u8], out: &mut [u8]) {
         assert!(plaintext.len().checked_add(aesgcm::TAG_SIZE) == Some(out.len()));
 
-        let mut full_nonce = [0u8; Self::NONCE_SIZE];
-        full_nonce[4..].copy_from_slice(&nonce.to_be_bytes());
-
+        let full_nonce = Self::full_nonce(nonce);
         let (in_out, tag_out) = out.split_at_mut(plaintext.len());
         in_out.copy_from_slice(plaintext);
 
@@ -110,9 +115,7 @@ impl Cipher for TrezorCryptoAesGcm {
             .checked_add(aesgcm::TAG_SIZE)
             .is_some_and(|l| l <= in_out.len()));
 
-        let mut full_nonce = [0u8; Self::NONCE_SIZE];
-        full_nonce[4..].copy_from_slice(&nonce.to_be_bytes());
-
+        let full_nonce = Self::full_nonce(nonce);
         let (in_out, tag_out) =
             in_out[..plaintext_len + aesgcm::TAG_SIZE].split_at_mut(plaintext_len);
 
@@ -135,9 +138,7 @@ impl Cipher for TrezorCryptoAesGcm {
     ) -> Result<(), ()> {
         assert!(ciphertext.len().checked_sub(aesgcm::TAG_SIZE) == Some(out.len()));
 
-        let mut full_nonce = [0u8; Self::NONCE_SIZE];
-        full_nonce[4..].copy_from_slice(&nonce.to_be_bytes());
-
+        let full_nonce = Self::full_nonce(nonce);
         let (ciphertext, tag) = unwrap!(ciphertext.split_last_chunk::<{ aesgcm::TAG_SIZE }>());
         out.copy_from_slice(ciphertext);
 
@@ -145,7 +146,7 @@ impl Cipher for TrezorCryptoAesGcm {
         let mut ctx = unwrap!(ctx);
         unwrap!(ctx.decrypt_in_place(out));
         unwrap!(ctx.auth(ad));
-        ctx.finish(tag).map_err(|_| ())?;
+        ctx.finish(tag).map_err(|_| out.zeroize())?;
 
         Ok(())
     }
@@ -160,9 +161,7 @@ impl Cipher for TrezorCryptoAesGcm {
         assert!(ciphertext_len <= in_out.len());
         assert!(ciphertext_len >= aesgcm::TAG_SIZE);
 
-        let mut full_nonce = [0u8; Self::NONCE_SIZE];
-        full_nonce[4..].copy_from_slice(&nonce.to_be_bytes());
-
+        let full_nonce = Self::full_nonce(nonce);
         let in_out = &mut in_out[..ciphertext_len];
         let (in_out, tag) = unwrap!(in_out.split_last_chunk_mut::<{ aesgcm::TAG_SIZE }>());
 
@@ -170,7 +169,7 @@ impl Cipher for TrezorCryptoAesGcm {
         let mut ctx = unwrap!(ctx);
         unwrap!(ctx.decrypt_in_place(in_out));
         unwrap!(ctx.auth(ad));
-        ctx.finish(tag).map_err(|_| ())?;
+        ctx.finish(tag).map_err(|_| in_out.zeroize())?;
 
         Ok(in_out.len())
     }
