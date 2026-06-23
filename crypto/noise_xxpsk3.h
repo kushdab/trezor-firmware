@@ -296,7 +296,7 @@ bool noise_xxpsk3_responder_handle_request1(noise_xxpsk3_responder_t *rspn,
  */
 bool noise_xxpsk3_responder_create_response1(
     noise_xxpsk3_responder_t *rspn, const uint8_t *payload, size_t payload_size,
-    uint8_t *response, size_t response_buf_size, size_t *response_size);
+    uint8_t *response, size_t max_response_size, size_t *response_size);
 
 /**
  * @brief Handle the second handshake message.
