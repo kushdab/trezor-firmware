@@ -289,7 +289,7 @@ bool noise_xxpsk3_responder_handle_request1(noise_xxpsk3_responder_t *rspn,
  * @param payload Plain payload to send (may be empty)
  * @param payload_size Length of the payload in bytes
  * @param response Output buffer for the response message
- * @param response_buf_size Size of the output buffer
+ * @param max_response_size Size of the output buffer
  * @param response_size Set to the number of bytes written to the response
  * buffer
  * @return true if the response was created correctly, false otherwise
