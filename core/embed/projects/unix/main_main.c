@@ -23,7 +23,6 @@
 
 #include <io/display.h>
 #include <io/rsod.h>
-#include <io/usb_config.h>
 #include <sec/rsod_special.h>
 #include <sec/unit_properties.h>
 #include <sys/applet.h>
@@ -35,6 +34,10 @@
 #include <sys/system.h>
 #include <sys/systick.h>
 #include <sys/systimer.h>
+
+#ifdef USE_USB
+#include <io/usb_config.h>
+#endif
 
 #ifdef USE_APP_LOADING
 #include <io/app_cache.h>
@@ -101,7 +104,9 @@ static void drivers_init(void) {
   tropic_init();
 #endif
 
+#ifdef USE_USB
   usb_configure(NULL);
+#endif
 
 #ifdef USE_BLE
   ble_init();
