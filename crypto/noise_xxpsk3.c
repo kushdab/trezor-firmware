@@ -101,9 +101,9 @@ static void hkdf3(const uint8_t *chaining_key, size_t chaining_key_len,
   memzero(buf, sizeof(buf));
 }
 
-static void hkdf2(uint8_t *chaining_key, size_t chaining_key_len, uint8_t *key,
-                  size_t key_len, uint8_t (*output1)[HASHLEN],
-                  uint8_t (*output2)[HASHLEN]) {
+static void hkdf2(const uint8_t *chaining_key, size_t chaining_key_len,
+                  const uint8_t *key, size_t key_len,
+                  uint8_t (*output1)[HASHLEN], uint8_t (*output2)[HASHLEN]) {
   uint8_t temp_key[HASHLEN] = {0};
   hmac_sha256(chaining_key, chaining_key_len, key, key_len, temp_key);
 
