@@ -295,13 +295,13 @@ static bool decrypt_with_ad(cipher_state_t *cs, const uint8_t *ad,
  * @param ss pointer to symmetric state structure,
  * @param plaintext pointer to decrypted byte array input of size defined by
  * `len` param
+ * @param plaintext_len size of the decrypted byte array
  * @param ciphertext pointer to encrypted byte array output of size defined by
  * `len` param + NOISE_TAG_SIZE_BYTES
- * @param plaintext_len size of the decrypted byte array
  * @return bool;
  */
 static bool ss_encrypt_and_hash(symmetric_state_t *ss, const uint8_t *plaintext,
-                                uint8_t *ciphertext, size_t plaintext_len) {
+                                size_t plaintext_len, uint8_t *ciphertext) {
   if (!encrypt_with_ad(&ss->cipher_state, ss->handshake_hash, HASHLEN,
                        plaintext, plaintext_len, ciphertext)) {
     return false;
@@ -462,8 +462,8 @@ bool noise_xxpsk3_responder_create_response1(
   ss_mix_key(&state->symmetric_state, &input_key_material);
 
   // Encrypt static public key
-  if (!ss_encrypt_and_hash(&state->symmetric_state, state->static_public,
-                           response + DHLEN, DHLEN)) {
+  if (!ss_encrypt_and_hash(&state->symmetric_state, state->static_public, DHLEN,
+                           response + DHLEN)) {
     goto cleanup;
   }
 
@@ -473,9 +473,8 @@ bool noise_xxpsk3_responder_create_response1(
   memzero(input_key_material, sizeof(input_key_material));
 
   // Encrypt payload
-  if (!ss_encrypt_and_hash(&state->symmetric_state, payload,
-                           response + (2 * DHLEN + NOISE_TAG_SIZE_BYTES),
-                           payload_size)) {
+  if (!ss_encrypt_and_hash(&state->symmetric_state, payload, payload_size,
+                           response + (2 * DHLEN + NOISE_TAG_SIZE_BYTES))) {
     goto cleanup;
   }
 
@@ -608,8 +607,8 @@ bool noise_xxpsk3_initiator_create_request1(
   ss_mix_key(&state->symmetric_state, (uint8_t (*)[DHLEN])request);
 
   // PSK mode established a key at the `e` token, so the payload is encrypted.
-  if (!ss_encrypt_and_hash(&state->symmetric_state, payload, request + DHLEN,
-                           payload_size)) {
+  if (!ss_encrypt_and_hash(&state->symmetric_state, payload, payload_size,
+                           request + DHLEN)) {
     goto cleanup;
   }
 
@@ -694,8 +693,8 @@ bool noise_xxpsk3_initiator_create_request2(
 
   noise_xxpsk3_state_t *state = &intr->state;
 
-  if (!ss_encrypt_and_hash(&state->symmetric_state, state->static_public,
-                           request, DHLEN)) {
+  if (!ss_encrypt_and_hash(&state->symmetric_state, state->static_public, DHLEN,
+                           request)) {
     goto cleanup;
   }
 
@@ -707,9 +706,8 @@ bool noise_xxpsk3_initiator_create_request2(
 
   ss_mix_key_and_hash(&state->symmetric_state, &state->psk);
 
-  if (!ss_encrypt_and_hash(&state->symmetric_state, payload,
-                           request + DHLEN + NOISE_TAG_SIZE_BYTES,
-                           payload_size)) {
+  if (!ss_encrypt_and_hash(&state->symmetric_state, payload, payload_size,
+                           request + DHLEN + NOISE_TAG_SIZE_BYTES)) {
     goto cleanup;
   }
 
