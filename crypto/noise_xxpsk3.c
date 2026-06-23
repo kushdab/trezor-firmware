@@ -350,7 +350,7 @@ static bool noise_xxpsk3_init_state(noise_xxpsk3_state_t *state,
   memcpy(state->static_private, static_private_key, DHLEN);
   curve25519_scalarmult_basepoint(state->static_public, state->static_private);
 
-  ss_mix_hash(&state->symmetric_state, (uint8_t *)prologue, prologue_len);
+  ss_mix_hash(&state->symmetric_state, prologue, prologue_len);
 
   memcpy(state->psk, psk, DHLEN);
 
