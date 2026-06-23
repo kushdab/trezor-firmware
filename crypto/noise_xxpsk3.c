@@ -626,7 +626,8 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
   uint8_t input_key_material[DHLEN] = {0};
 
   if (!intr->initialized || intr->handshake_stage != WAITING_FOR_RESPONSE1 ||
-      msg == NULL || payload == NULL || payload_size == NULL) {
+      msg == NULL || payload_size == NULL ||
+      (payload == NULL && payload_size > 0)) {
     goto cleanup;
   }
   if (msg_len < 2 * DHLEN + 2 * NOISE_TAG_SIZE_BYTES) {
