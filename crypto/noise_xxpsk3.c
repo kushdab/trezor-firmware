@@ -372,7 +372,7 @@ bool noise_xxpsk3_responder_init(noise_xxpsk3_responder_t *rspn,
   }
 
   // Clear the responder structure
-  memzero(rspn, sizeof(noise_xxpsk3_responder_t));
+  memset(rspn, 0, sizeof(noise_xxpsk3_responder_t));
 
   if (!noise_xxpsk3_init_state(&rspn->state, psk, static_private_key, NULL,
                                0)) {
