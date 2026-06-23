@@ -244,7 +244,7 @@ static bool encrypt_with_ad(cipher_state_t *cs, const uint8_t *ad,
  */
 static bool decrypt_with_ad(cipher_state_t *cs, const uint8_t *ad,
                             size_t ad_len, const uint8_t *ciphertext,
-                            uint8_t *plaintext, size_t ciphertext_len) {
+                            size_t ciphertext_len, uint8_t *plaintext) {
   if (!cs->has_key || cs->nonce >= NONCE_LIMIT) {
     return false;
 
@@ -327,7 +327,7 @@ static bool ss_decrypt_and_hash(symmetric_state_t *ss,
                                 const uint8_t *ciphertext,
                                 size_t ciphertext_len, uint8_t *plaintext) {
   bool status = decrypt_with_ad(&ss->cipher_state, ss->handshake_hash, HASHLEN,
-                                ciphertext, plaintext, ciphertext_len);
+                                ciphertext, ciphertext_len, plaintext);
 
   // In the decryption case, the hash is mixed even if decryption fails, as
   // specified in the Noise Protocol Framework.
@@ -768,8 +768,8 @@ bool noise_xxpsk3_receive_message(transport_state_t *ts,
     return false;
   }
 
-  if (!decrypt_with_ad(&ts->receive_cipher_state, NULL, 0, ciphertext, payload,
-                       ciphertext_size)) {
+  if (!decrypt_with_ad(&ts->receive_cipher_state, NULL, 0, ciphertext,
+                       ciphertext_size, payload)) {
     return false;
   }
 
