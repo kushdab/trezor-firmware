@@ -318,14 +318,14 @@ static bool ss_encrypt_and_hash(symmetric_state_t *ss, const uint8_t *plaintext,
  * @param ss pointer to symmetric state structure,
  * @param ciphertext pointer to encrypted byte array input of size defined by
  * `ciphertext_len`
+ * @param ciphertext_len size of the encrypted byte array
  * @param plaintext pointer to decrypted byte array output of size defined by
  * `ciphertext_len - NOISE_TAG_SIZE_BYTES`
- * @param ciphertext_len size of the encrypted byte array
  * @return bool;
  */
 static bool ss_decrypt_and_hash(symmetric_state_t *ss,
-                                const uint8_t *ciphertext, uint8_t *plaintext,
-                                size_t ciphertext_len) {
+                                const uint8_t *ciphertext,
+                                size_t ciphertext_len, uint8_t *plaintext) {
   bool status = decrypt_with_ad(&ss->cipher_state, ss->handshake_hash, HASHLEN,
                                 ciphertext, plaintext, ciphertext_len);
 
@@ -414,8 +414,8 @@ bool noise_xxpsk3_responder_handle_request1(noise_xxpsk3_responder_t *rspn,
 
   // PSK mode established a key at the `e` token, so the payload is encrypted.
   uint8_t payload[NOISE_MAX_PAYLOAD_BYTES];
-  if (!ss_decrypt_and_hash(&state->symmetric_state, msg + DHLEN, payload,
-                           msg_len - DHLEN)) {
+  if (!ss_decrypt_and_hash(&state->symmetric_state, msg + DHLEN,
+                           msg_len - DHLEN, payload)) {
     goto cleanup;
   }
 
@@ -507,8 +507,8 @@ bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
   }
 
   if (!ss_decrypt_and_hash(&state->symmetric_state, msg,
-                           state->remote_static_public,  // <- Decrypt here
-                           DHLEN + NOISE_TAG_SIZE_BYTES)) {
+                           DHLEN + NOISE_TAG_SIZE_BYTES,
+                           state->remote_static_public)) {
     goto cleanup;
   }
 
@@ -533,8 +533,7 @@ bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
 
   if (!ss_decrypt_and_hash(&state->symmetric_state,
                            msg + DHLEN + NOISE_TAG_SIZE_BYTES,
-                           payload,  // <- Decrypt here
-                           encrypted_payload_len)) {
+                           encrypted_payload_len, payload)) {
     goto cleanup;
   }
 
@@ -650,8 +649,8 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
   ss_mix_key(&state->symmetric_state, &input_key_material);
 
   if (!ss_decrypt_and_hash(&state->symmetric_state, msg + DHLEN,
-                           state->remote_static_public,  // <- Decrypt here
-                           DHLEN + NOISE_TAG_SIZE_BYTES)) {
+                           DHLEN + NOISE_TAG_SIZE_BYTES,
+                           state->remote_static_public)) {
     goto cleanup;
   }
   state->has_remote_static_public = true;
@@ -661,9 +660,9 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
   ss_mix_key(&state->symmetric_state, &input_key_material);
 
   // decrypt received payload
-  if (!ss_decrypt_and_hash(&state->symmetric_state,
-                           msg + (2 * DHLEN + NOISE_TAG_SIZE_BYTES), payload,
-                           msg_len - (2 * DHLEN + NOISE_TAG_SIZE_BYTES))) {
+  if (!ss_decrypt_and_hash(
+          &state->symmetric_state, msg + (2 * DHLEN + NOISE_TAG_SIZE_BYTES),
+          msg_len - (2 * DHLEN + NOISE_TAG_SIZE_BYTES), payload)) {
     goto cleanup;
   }
 
