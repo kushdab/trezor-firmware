@@ -359,6 +359,7 @@ impl Armv8mBinary {
             stack_va: U32::new(self.stack.va),
             stack_size: U32::new(self.stack.size),
             heap_size: U32::new(0),
+            runtime_flags: U32::new(0),
         };
 
         Ok(arm_header.to_padded_bytes())
