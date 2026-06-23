@@ -561,7 +561,7 @@ bool noise_xxpsk3_initiator_init(noise_xxpsk3_initiator_t *intr,
   }
 
   // Clear the initiator structure
-  memzero(intr, sizeof(noise_xxpsk3_initiator_t));
+  memset(intr, 0, sizeof(noise_xxpsk3_initiator_t));
 
   if (!noise_xxpsk3_init_state(&intr->state, psk, static_private_key, NULL,
                                0)) {
