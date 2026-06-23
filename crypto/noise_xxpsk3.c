@@ -184,16 +184,16 @@ static void generate_keypair(uint8_t (*private_key)[DHLEN],
  * @param cs cipher state containing the key and nonce for encryption
  * @param ad pointer to the associated data
  * @param ad_len length of the associated data
- * @param dec_bytes pointer to the decrypted byte array input of size defined by
- * `len`
- * @param enc_bytes pointer to the encrypted byte array output of size defined
- * by `len + NOISE_TAG_SIZE_BYTES`
- * @param dec_bytes_len size of the decrypted byte array
+ * @param plaintext pointer to the input byte array of size defined by
+ * `plaintext_len`
+ * @param plaintext_len size of the input byte array
+ * @param ciphertext pointer to the output byte array of size defined
+ * by `plaintext_len + NOISE_TAG_SIZE_BYTES`
  * @return bool;
  */
 static bool encrypt_with_ad(cipher_state_t *cs, const uint8_t *ad,
-                            size_t ad_len, const uint8_t *dec_bytes,
-                            uint8_t *enc_bytes, size_t dec_bytes_len) {
+                            size_t ad_len, const uint8_t *plaintext,
+                            size_t plaintext_len, uint8_t *ciphertext) {
   if (!cs->has_key || cs->nonce >= NONCE_LIMIT) {
     return false;
   } else {
@@ -207,15 +207,16 @@ static bool encrypt_with_ad(cipher_state_t *cs, const uint8_t *ad,
     uint8_t nonce_bytes[NONCE_ARRAY_SIZE_BYTES] = {0};
     nonce_to_bytes(cs->nonce, &nonce_bytes);
 
-    if (enc_bytes != NULL && dec_bytes != NULL) {  // to suppress asan warning
-      memcpy(enc_bytes, dec_bytes, dec_bytes_len);
+    if (ciphertext != NULL && plaintext != NULL) {  // to suppress asan warning
+      memcpy(ciphertext, plaintext, plaintext_len);
     }
 
     if (gcm_encrypt_message(nonce_bytes, NONCE_ARRAY_SIZE_BYTES, ad, ad_len,
-                            enc_bytes, dec_bytes_len, enc_bytes + dec_bytes_len,
-                            NOISE_TAG_SIZE_BYTES, &ctx) != RETURN_GOOD) {
+                            ciphertext, plaintext_len,
+                            ciphertext + plaintext_len, NOISE_TAG_SIZE_BYTES,
+                            &ctx) != RETURN_GOOD) {
       memzero(&ctx, sizeof(ctx));
-      memzero(enc_bytes, dec_bytes_len + NOISE_TAG_SIZE_BYTES);
+      memzero(ciphertext, plaintext_len + NOISE_TAG_SIZE_BYTES);
       memzero(nonce_bytes, sizeof(nonce_bytes));
       return false;
     }
@@ -234,21 +235,21 @@ static bool encrypt_with_ad(cipher_state_t *cs, const uint8_t *ad,
  * @param cs cipher state containing the key and nonce for decryption
  * @param ad pointer to the associated data
  * @param ad_len length of the associated data
- * @param enc_bytes pointer to the encrypted byte array input of size defined by
- * `len`
- * @param dec_bytes pointer to the decrypted byte array output of size defined
+ * @param ciphertext pointer to the encrypted byte array input of size defined
+ * by `len`
+ * @param plaintext pointer to the decrypted byte array output of size defined
  * by `len - NOISE_TAG_SIZE_BYTES`
- * @param enc_bytes_len size of the encrypted byte array
+ * @param ciphertext_len size of the encrypted byte array
  * @return bool;
  */
 static bool decrypt_with_ad(cipher_state_t *cs, const uint8_t *ad,
-                            size_t ad_len, const uint8_t *enc_bytes,
-                            uint8_t *dec_bytes, size_t enc_bytes_len) {
+                            size_t ad_len, const uint8_t *ciphertext,
+                            uint8_t *plaintext, size_t ciphertext_len) {
   if (!cs->has_key || cs->nonce >= NONCE_LIMIT) {
     return false;
 
   } else {
-    if (enc_bytes_len < NOISE_TAG_SIZE_BYTES) {
+    if (ciphertext_len < NOISE_TAG_SIZE_BYTES) {
       // encrypted message is too short to contain the auth. tag
       return false;
     }
@@ -264,17 +265,18 @@ static bool decrypt_with_ad(cipher_state_t *cs, const uint8_t *ad,
     nonce_to_bytes(cs->nonce, &nonce_bytes);
 
     // decrypted message is shorter by auth. tag
-    size_t dec_bytes_len = enc_bytes_len - NOISE_TAG_SIZE_BYTES;
+    size_t plaintext_len = ciphertext_len - NOISE_TAG_SIZE_BYTES;
 
-    if (dec_bytes != NULL && enc_bytes != NULL) {  // to suppress asan warning
-      memcpy(dec_bytes, enc_bytes, dec_bytes_len);
+    if (plaintext != NULL && ciphertext != NULL) {  // to suppress asan warning
+      memcpy(plaintext, ciphertext, plaintext_len);
     }
 
     if (gcm_decrypt_message(nonce_bytes, NONCE_ARRAY_SIZE_BYTES, ad, ad_len,
-                            dec_bytes, dec_bytes_len, enc_bytes + dec_bytes_len,
-                            NOISE_TAG_SIZE_BYTES, &ctx) != RETURN_GOOD) {
+                            plaintext, plaintext_len,
+                            ciphertext + plaintext_len, NOISE_TAG_SIZE_BYTES,
+                            &ctx) != RETURN_GOOD) {
       memzero(&ctx, sizeof(ctx));
-      memzero(dec_bytes, dec_bytes_len);
+      memzero(plaintext, plaintext_len);
       memzero(nonce_bytes, sizeof(nonce_bytes));
       return false;
     }
@@ -291,21 +293,21 @@ static bool decrypt_with_ad(cipher_state_t *cs, const uint8_t *ad,
  * @brief encrypt and hash
  *
  * @param ss pointer to symmetric state structure,
- * @param dec_bytes pointer to decrypted byte array input of size defined by
+ * @param plaintext pointer to decrypted byte array input of size defined by
  * `len` param
- * @param enc_bytes pointer to encrypted byte array output of size defined by
+ * @param ciphertext pointer to encrypted byte array output of size defined by
  * `len` param + NOISE_TAG_SIZE_BYTES
- * @param dec_bytes_len size of the decrypted byte array
+ * @param plaintext_len size of the decrypted byte array
  * @return bool;
  */
-static bool ss_encrypt_and_hash(symmetric_state_t *ss, const uint8_t *dec_bytes,
-                                uint8_t *enc_bytes, size_t dec_bytes_len) {
+static bool ss_encrypt_and_hash(symmetric_state_t *ss, const uint8_t *plaintext,
+                                uint8_t *ciphertext, size_t plaintext_len) {
   if (!encrypt_with_ad(&ss->cipher_state, ss->handshake_hash, HASHLEN,
-                       dec_bytes, enc_bytes, dec_bytes_len)) {
+                       plaintext, plaintext_len, ciphertext)) {
     return false;
   }
 
-  ss_mix_hash(ss, enc_bytes, dec_bytes_len + NOISE_TAG_SIZE_BYTES);
+  ss_mix_hash(ss, ciphertext, plaintext_len + NOISE_TAG_SIZE_BYTES);
 
   return true;
 }
@@ -314,21 +316,22 @@ static bool ss_encrypt_and_hash(symmetric_state_t *ss, const uint8_t *dec_bytes,
  * @brief decrypt and hash
  *
  * @param ss pointer to symmetric state structure,
- * @param enc_bytes pointer to encrypted byte array input of size defined by
- * `enc_bytes_len`
- * @param dec_bytes pointer to decrypted byte array output of size defined by
- * `enc_bytes_len - NOISE_TAG_SIZE_BYTES`
- * @param enc_bytes_len size of the encrypted byte array
+ * @param ciphertext pointer to encrypted byte array input of size defined by
+ * `ciphertext_len`
+ * @param plaintext pointer to decrypted byte array output of size defined by
+ * `ciphertext_len - NOISE_TAG_SIZE_BYTES`
+ * @param ciphertext_len size of the encrypted byte array
  * @return bool;
  */
-static bool ss_decrypt_and_hash(symmetric_state_t *ss, const uint8_t *enc_bytes,
-                                uint8_t *dec_bytes, size_t enc_bytes_len) {
+static bool ss_decrypt_and_hash(symmetric_state_t *ss,
+                                const uint8_t *ciphertext, uint8_t *plaintext,
+                                size_t ciphertext_len) {
   bool status = decrypt_with_ad(&ss->cipher_state, ss->handshake_hash, HASHLEN,
-                                enc_bytes, dec_bytes, enc_bytes_len);
+                                ciphertext, plaintext, ciphertext_len);
 
   // In the decryption case, the hash is mixed even if decryption fails, as
   // specified in the Noise Protocol Framework.
-  ss_mix_hash(ss, enc_bytes, enc_bytes_len);
+  ss_mix_hash(ss, ciphertext, ciphertext_len);
 
   return status;
 }
@@ -743,8 +746,8 @@ bool noise_xxpsk3_send_message(transport_state_t *ts, const uint8_t *payload,
     return false;
   }
 
-  if (!encrypt_with_ad(&ts->send_cipher_state, NULL, 0, payload, ciphertext,
-                       payload_size)) {
+  if (!encrypt_with_ad(&ts->send_cipher_state, NULL, 0, payload, payload_size,
+                       ciphertext)) {
     return false;
   }
 
