@@ -120,8 +120,8 @@ static void hkdf2(const uint8_t *chaining_key, size_t chaining_key_len,
   memzero(buf, sizeof(buf));
 }
 
-static void dh(uint8_t (*output)[DHLEN], uint8_t (*private_key)[DHLEN],
-               uint8_t (*public_key)[DHLEN]) {
+static void dh(uint8_t (*output)[DHLEN], const uint8_t (*private_key)[DHLEN],
+               const uint8_t (*public_key)[DHLEN]) {
   curve25519_scalarmult(*output, *private_key, *public_key);
 }
 
