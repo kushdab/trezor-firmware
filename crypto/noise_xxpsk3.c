@@ -46,7 +46,7 @@ static void nonce_to_bytes(uint64_t nonce,
   (*arr)[2] = 0x0;
   (*arr)[3] = 0x0;
 
-  for (uint8_t i = 4; i < NONCE_ARRAY_SIZE_BYTES; i++) {
+  for (size_t i = 4; i < NONCE_ARRAY_SIZE_BYTES; i++) {
     (*arr)[i] = (nonce >> (56 - (i - 4) * 8)) & 0xFF;
   }
 }
