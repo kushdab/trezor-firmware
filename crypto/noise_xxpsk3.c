@@ -136,7 +136,7 @@ static void ss_mix_key(symmetric_state_t *ss,
 }
 
 static void ss_mix_key_and_hash(symmetric_state_t *ss,
-                                uint8_t (*key)[HASHLEN]) {
+                                const uint8_t (*key)[HASHLEN]) {
   uint8_t temp_h[HASHLEN] = {0};
 
   hkdf3(ss->chaining_key, HASHLEN, (uint8_t *)key, HASHLEN, &ss->chaining_key,
