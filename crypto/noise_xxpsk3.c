@@ -55,8 +55,8 @@ static void ss_init(symmetric_state_t *ss, const uint8_t *protocol_name,
                     size_t protocol_name_len) {
   if (protocol_name_len <= HASHLEN) {
     memcpy(ss->handshake_hash, protocol_name, protocol_name_len);
-    memzero(ss->handshake_hash + protocol_name_len,
-            HASHLEN - protocol_name_len);
+    memset(ss->handshake_hash + protocol_name_len, 0,
+           HASHLEN - protocol_name_len);
   } else {
     sha256_Raw(protocol_name, protocol_name_len, ss->handshake_hash);
   }
@@ -76,9 +76,10 @@ static void ss_mix_hash(symmetric_state_t *ss, const uint8_t *data,
   memzero(&context, sizeof(context));
 }
 
-static void hkdf3(uint8_t *chaining_key, size_t chaining_key_len, uint8_t *key,
-                  size_t key_len, uint8_t (*output1)[HASHLEN],
-                  uint8_t (*output2)[HASHLEN], uint8_t (*output3)[HASHLEN]) {
+static void hkdf3(const uint8_t *chaining_key, size_t chaining_key_len,
+                  const uint8_t *key, size_t key_len,
+                  uint8_t (*output1)[HASHLEN], uint8_t (*output2)[HASHLEN],
+                  uint8_t (*output3)[HASHLEN]) {
   uint8_t temp_key[HASHLEN] = {0};
   hmac_sha256(chaining_key, chaining_key_len, key, key_len, temp_key);
 
