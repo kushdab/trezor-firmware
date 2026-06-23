@@ -2285,6 +2285,10 @@ static bool tropic_parse_iterations(cli_t* cli, uint32_t* iterations) {
     cli_error_arg(cli, "Expecting number of iterations.");
     return false;
   }
+  if (*iterations == 0) {
+    cli_error_arg(cli, "Iterations must be greater than 0.");
+    return false;
+  }
   return true;
 }
 
@@ -2309,6 +2313,14 @@ static bool tropic_parse_iterations_and_slots(cli_t* cli, uint32_t* iterations,
       cli_error_arg(cli, "Expecting slot count.");
       return false;
     }
+  }
+  if (*iterations == 0) {
+    cli_error_arg(cli, "Iterations must be greater than 0.");
+    return false;
+  }
+  if (*slot_count == 0) {
+    cli_error_arg(cli, "Slot count must be greater than 0.");
+    return false;
   }
   if (argc == 3) {
     uint32_t slot = 0;

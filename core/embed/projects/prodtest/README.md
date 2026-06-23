@@ -1487,12 +1487,12 @@ The commands that test multiple slots select them pseudorandomly deterministical
 |---|---|---|
 | `tropic-stress-init` | `[<iterations>]` | Repeatedly reinitialize the chip. |
 | `tropic-stress-session` | `[<iterations>]` | Repeatedly tear down and re-establish the secure session. |
-| `tropic-stress-mac-and-destroy` | `[<iterations> <slot_count> [<slot>]]` | Hammer MAC-and-destroy on a sample of slots with random inputs. |
+| `tropic-stress-mac-and-destroy` | `[<iterations> <slot-count> [<slot>]]` | Hammer MAC-and-destroy on a sample of slots with random inputs. |
 | `tropic-stress-sign` | `[<iterations>]` | Generate EdDSA signatures repeatedly without verification. |
-| `tropic-test-mac-and-destroy` | `[<iterations> <slot_count> [<slot>]]` | Verify MAC-and-destroy produces consistent results; one consistency check per iteration against the first result. |
+| `tropic-test-mac-and-destroy` | `[<iterations> <slot-count> [<slot>]]` | Verify MAC-and-destroy produces consistent results; one consistency check per iteration against the first result. |
 | `tropic-test-sign` | `[<iterations>]` | Generate EdDSA signatures with verification; one sign & verify per iteration. |
-| `tropic-test-counter` | `[<iterations> <slot_count> [<slot>]]` | Verify monotonic counters set, read back, and decrement correctly; one decrement & check per iteration. |
-| `tropic-test-rmem` | `[<iterations> <slot_count> [<slot>]]` | Write random data to a sample of R-memory slots and read it back; one write & read cycle per iteration. |
+| `tropic-test-counter` | `[<iterations> <slot-count> [<slot>]]` | Verify monotonic counters set, read back, and decrement correctly; one decrement & check per iteration. |
+| `tropic-test-rmem` | `[<iterations> <slot-count> [<slot>]]` | Write random data to a sample of R-memory slots and read it back; one write & read cycle per iteration. |
 | `tropic-test-rng` | `[<iterations>]` | Sanity-check the TRNG output (non-zero, non-repeating). |
 | `tropic-test` | | Run the full battery above with default parameters. |
 
