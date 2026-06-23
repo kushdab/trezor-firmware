@@ -125,7 +125,7 @@ static void dh(uint8_t (*output)[DHLEN], uint8_t (*private_key)[DHLEN],
 }
 
 static void ss_mix_key(symmetric_state_t *ss,
-                       uint8_t (*input_key_material)[DHLEN]) {
+                       const uint8_t (*input_key_material)[DHLEN]) {
   // Mix key
   hkdf2(ss->chaining_key, HASHLEN, *input_key_material, DHLEN,
         &ss->chaining_key,     // <- Output 1
