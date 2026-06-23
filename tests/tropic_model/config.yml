@@ -54,7 +54,7 @@ r_config:
   cfg_gpo: 0
   cfg_sensors: 0
   cfg_sleep_mode: 1
-  cfg_start_up: 1
+  cfg_start_up: 9
   cfg_uap_ecc_key_erase: 101058054
   cfg_uap_ecc_key_generate: 101058052
   cfg_uap_ecc_key_read: 101058054
@@ -109,7 +109,7 @@ r_user_data:
       AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
   6:
     value: !!binary |
-      AQ==
+      AAAAAA==
 riscv_fw_version: 1.0.0
 s_t_priv: tropic01_ese_private_key_1.pem
 s_t_pub: tropic01_ese_public_key_1.pem

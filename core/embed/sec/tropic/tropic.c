@@ -62,13 +62,15 @@
 #define TROPIC_CHANGE_COUNTER_SLOT TR01_MCOUNTER_INDEX_4
 #define TROPIC_CHANGE_COUNTER_SLOT_MAX_VALUE 0xfffffffe
 
-static const uint8_t
-    TROPIC_BATCHES_V1[][LT_MEMBER_SIZE(lt_chip_id_t, batch_id)] = {
-        {0x19, 0x07, 0x11, 0x11, 0x07}, {0x19, 0x07, 0x1f, 0x0a, 0x04},
-        {0x19, 0x08, 0x0b, 0x10, 0x09}, {0x19, 0x08, 0x13, 0x09, 0x2c},
-        {0x19, 0x09, 0x10, 0x0b, 0x04}, {0x19, 0x0a, 0x08, 0x10, 0x10},
-        {0x19, 0x0a, 0x1f, 0x0f, 0x2c}, {0x19, 0x0c, 0x03, 0x0d, 0x38},
-        {0x19, 0x04, 0x09, 0x0c, 0x07}};
+static const uint8_t TROPIC_BATCHES_V1[][LT_MEMBER_SIZE(
+    lt_chip_id_t, batch_id)] = {{0x19, 0x07, 0x11, 0x11, 0x07},
+                                {0x19, 0x07, 0x1f, 0x0a, 0x04},
+                                {0x19, 0x08, 0x0b, 0x10, 0x09},
+                                {0x19, 0x04, 0x09, 0x0c, 0x07}};
+// {0x19, 0x08, 0x13, 0x09, 0x2c},
+// {0x19, 0x09, 0x10, 0x0b, 0x04}, {0x19, 0x0a, 0x08, 0x10, 0x10},
+// {0x19, 0x0a, 0x1f, 0x0f, 0x2c}, {0x19, 0x0c, 0x03, 0x0d, 0x38},
+// };
 
 // clang-format off
 // Temporary address table for config objects, ordered to match lt_config_t.obj[].
@@ -106,6 +108,37 @@ static const enum lt_config_obj_addr_t TROPIC_CONFIG_ADDRS[LT_CONFIG_OBJ_CNT] = 
     TR01_CFG_UAP_MAC_AND_DESTROY_ADDR,
 };
 // clang-format on
+
+typedef struct {
+  bool has_value;
+  uint32_t value;
+} optional_u32_t;
+
+typedef struct {
+  uint32_t distribution_version;
+  const struct lt_config_t *i_config;
+  const struct lt_config_t *min_r_config;
+  const struct lt_config_t *max_r_config;
+} tropic_expected_config_t;
+
+typedef enum {
+  TROPIC_R_CONFIG_WRITE_IF_TOO_LOOSE,
+  TROPIC_R_CONFIG_WRITE_ALWAYS,
+} tropic_r_config_write_mode_t;
+
+typedef enum {
+  TROPIC_CONFIG_SET_FAILED,
+  TROPIC_CONFIG_SET_UNCHANGED,
+  TROPIC_CONFIG_SET_CHANGED,
+} tropic_config_set_result_t;
+
+typedef enum {
+  TROPIC_CONFIG_STRICTNESS_INVALID,
+  TROPIC_CONFIG_STRICTNESS_EQUAL,
+  TROPIC_CONFIG_STRICTNESS_FIRST_STRICTER,
+  TROPIC_CONFIG_STRICTNESS_SECOND_STRICTER,
+  TROPIC_CONFIG_STRICTNESS_INCOMPARABLE,
+} tropic_config_strictness_t;
 
 #ifdef TREZOR_EMULATOR
 #define TROPIC_RETRY_COMMAND(command) command
@@ -428,6 +461,17 @@ lt_ret_t lt_r_mem_data_erase_retry(lt_handle_t *tropic_handle,
   return TROPIC_RETRY_COMMAND(lt_r_mem_data_erase(tropic_handle, udata_slot));
 }
 
+static lt_ret_t lt_r_mem_data_erase_write(lt_handle_t *h,
+                                          const uint16_t udata_slot,
+                                          uint8_t *data, const uint16_t size) {
+  lt_ret_t ret = lt_r_mem_data_erase(h, udata_slot);
+  if (ret != LT_OK) {
+    return ret;
+  }
+
+  return lt_r_mem_data_write(h, udata_slot, data, size);
+}
+
 lt_ret_t lt_mac_and_destroy_retry(lt_handle_t *tropic_handle,
                                   const lt_mac_and_destroy_slot_t slot,
                                   const uint8_t *data_out, uint8_t *data_in) {
@@ -448,6 +492,28 @@ lt_ret_t lt_read_whole_R_config_retry(lt_handle_t *tropic_handle,
   // implementation.
   for (size_t i = 0; i < LT_CONFIG_OBJ_CNT; i++) {
     lt_ret_t ret = TROPIC_RETRY_COMMAND(lt_r_config_read(
+        tropic_handle, TROPIC_CONFIG_ADDRS[i], &config->obj[i]));
+    if (ret != LT_OK) {
+      return ret;
+    }
+  }
+
+  return LT_OK;
+}
+
+lt_ret_t lt_read_whole_I_config_retry(lt_handle_t *tropic_handle,
+                                      struct lt_config_t *config) {
+  if (tropic_handle == NULL || config == NULL) {
+    return LT_PARAM_ERR;
+  }
+
+  // We cannot simply use lt_read_whole_I_config() yet because it pulls the
+  // cfg_desc_table and causes RAM overflow.
+  // TODO: Keep this wrapper symmetric with lt_read_whole_R_config_retry()
+  // so the implementation can be switched once libtropic provides a const
+  // descriptor table.
+  for (size_t i = 0; i < LT_CONFIG_OBJ_CNT; i++) {
+    lt_ret_t ret = TROPIC_RETRY_COMMAND(lt_i_config_read(
         tropic_handle, TROPIC_CONFIG_ADDRS[i], &config->obj[i]));
     if (ret != LT_OK) {
       return ret;
@@ -497,29 +563,62 @@ static lt_ret_t lt_r_mem_data_read_retry(lt_handle_t *h,
       lt_r_mem_data_read(h, udata_slot, data, size, size_out));
 }
 
+static tropic_config_strictness_t compare_config_strictness(
+    const struct lt_config_t *config_1, const struct lt_config_t *config_2) {
+  if (config_1 == NULL || config_2 == NULL) {
+    return TROPIC_CONFIG_STRICTNESS_INVALID;
+  }
+
+  bool first_is_stricter = false;
+  bool second_is_stricter = false;
+  for (size_t i = 0; i < LT_CONFIG_OBJ_CNT; i++) {
+    uint32_t first_stricter_bits = ~config_1->obj[i] & config_2->obj[i];
+    uint32_t second_stricter_bits = config_1->obj[i] & ~config_2->obj[i];
+
+    if (first_stricter_bits != 0) {
+      first_is_stricter = true;
+    }
+    if (second_stricter_bits != 0) {
+      second_is_stricter = true;
+    }
+    if (first_is_stricter && second_is_stricter) {
+      return TROPIC_CONFIG_STRICTNESS_INCOMPARABLE;
+    }
+  }
+
+  if (first_is_stricter) {
+    return TROPIC_CONFIG_STRICTNESS_FIRST_STRICTER;
+  }
+  if (second_is_stricter) {
+    return TROPIC_CONFIG_STRICTNESS_SECOND_STRICTER;
+  }
+  return TROPIC_CONFIG_STRICTNESS_EQUAL;
+}
+
 static secbool tropic_ensure_i_config(
     const struct lt_config_t *config_irreversible) {
   tropic_driver_t *drv = &g_tropic_driver;
 
-  for (int8_t i = 0; i < LT_CONFIG_OBJ_CNT; i++) {
-    uint32_t expected = config_irreversible->obj[i];
-    uint32_t current = 0;
-    if (TROPIC_RETRY_COMMAND(lt_i_config_read(
-            &drv->handle, TROPIC_CONFIG_ADDRS[i], &current)) != LT_OK) {
+  struct lt_config_t current_config = {0};
+  if (lt_read_whole_I_config_retry(&drv->handle, &current_config) != LT_OK) {
+    return secfalse;
+  }
+
+  switch (compare_config_strictness(&current_config, config_irreversible)) {
+    case TROPIC_CONFIG_STRICTNESS_EQUAL:
+    case TROPIC_CONFIG_STRICTNESS_FIRST_STRICTER:
+      return sectrue;
+    case TROPIC_CONFIG_STRICTNESS_SECOND_STRICTER:
+      break;
+    case TROPIC_CONFIG_STRICTNESS_INVALID:
+    case TROPIC_CONFIG_STRICTNESS_INCOMPARABLE:
+    default:
       return secfalse;
-    }
+  }
 
-    // I-config bits are one-way: we can only change 1 -> 0. If this config
-    // expects a bit to be 1 but the chip already has it at 0, the device has
-    // previously applied a stricter configuration.
-    // Accept this for downgrade compatibility. The device remains in the
-    // stricter state.
-
-    // Bits that are currently 1 but are expected to be 0: flip them.
-    uint32_t to_flip = (~expected & current);
-    if (to_flip == 0) {
-      continue;
-    }
+  for (size_t i = 0; i < LT_CONFIG_OBJ_CNT; i++) {
+    uint32_t expected = config_irreversible->obj[i];
+    uint32_t to_flip = (~expected & current_config.obj[i]);
     for (size_t j = 0; j < 32; j++) {  // Tropic cfg objects are 32-bit
       if (to_flip & BIT(j)) {
         if (TROPIC_RETRY_COMMAND(lt_i_config_write(
@@ -528,16 +627,15 @@ static secbool tropic_ensure_i_config(
         }
       }
     }
+  }
 
-    current = 0;
-    if (TROPIC_RETRY_COMMAND(lt_i_config_read(
-            &drv->handle, TROPIC_CONFIG_ADDRS[i], &current)) != LT_OK) {
-      return secfalse;
-    }
-    // Check if any bits that should be 0 are still 1
-    if ((~expected & current) != 0) {
-      return secfalse;
-    }
+  current_config = (struct lt_config_t){0};
+  if (lt_read_whole_I_config_retry(&drv->handle, &current_config) != LT_OK) {
+    return secfalse;
+  }
+  if (memcmp(&current_config, config_irreversible, sizeof(current_config)) !=
+      0) {
+    return secfalse;
   }
 
   return sectrue;
@@ -573,75 +671,322 @@ static secbool tropic_ensure_r_config(
   return sectrue;
 }
 
-secbool tropic_ensure_configuration(void) {
-  if (!tropic_session_start()) {
-    return secfalse;
+static const tropic_config_distribution_t *find_config_distribution(
+    uint32_t distribution_version) {
+  for (size_t i = 0; i < tropic_config_distribution_count; i++) {
+    if (tropic_config_distributions[i].distribution_version ==
+        distribution_version) {
+      return &tropic_config_distributions[i];
+    }
+  }
+  return NULL;
+}
+
+bool tropic_get_config_from_versioned_configs(
+    const tropic_versioned_config_t *configs, size_t config_count,
+    uint32_t config_version, const struct lt_config_t **config_out) {
+  if (config_out == NULL) {
+    return false;
   }
 
+  for (size_t i = 0; i < config_count; i++) {
+    if (configs[i].version == config_version) {
+      *config_out = &configs[i].config;
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool get_expected_tropic_config_from_distribution_version(
+    uint32_t distribution_version, tropic_expected_config_t *config_out) {
+  if (config_out == NULL) {
+    return false;
+  }
+
+  const tropic_config_distribution_t *distribution =
+      find_config_distribution(distribution_version);
+  if (distribution == NULL) {
+    return false;
+  }
+
+  const struct lt_config_t *i_config = NULL;
+  const struct lt_config_t *min_r_config = NULL;
+  const struct lt_config_t *max_r_config = NULL;
+
+  if (!tropic_get_config_from_versioned_configs(
+          tropic_irreversible_configs, tropic_irreversible_config_count,
+          distribution->irreversible_version, &i_config)) {
+    return false;
+  }
+  if (!tropic_get_config_from_versioned_configs(
+          tropic_reversible_configs, tropic_reversible_config_count,
+          distribution->min_reversible_version, &min_r_config)) {
+    return false;
+  }
+  if (!tropic_get_config_from_versioned_configs(
+          tropic_reversible_configs, tropic_reversible_config_count,
+          distribution->max_reversible_version, &max_r_config)) {
+    return false;
+  }
+
+  config_out->distribution_version = distribution_version;
+  config_out->i_config = i_config;
+  config_out->min_r_config = min_r_config;
+  config_out->max_r_config = max_r_config;
+  return true;
+}
+
+static lt_ret_t lt_r_mem_data_erase_write_retry(lt_handle_t *h,
+                                                const uint16_t udata_slot,
+                                                uint8_t *data,
+                                                const uint16_t size) {
+  return TROPIC_RETRY_COMMAND(
+      lt_r_mem_data_erase_write(h, udata_slot, data, size));
+}
+
+static bool tropic_get_distribution_version(
+    optional_u32_t *distribution_version_out, uint16_t slot) {
+  uint32_t distribution_version = 0;
+  uint16_t data_read_size = 0;
+  lt_ret_t ret = lt_r_mem_data_read_retry(
+      &g_tropic_driver.handle, slot, (uint8_t *)&distribution_version,
+      sizeof(distribution_version), &data_read_size);
+  if (ret == LT_L3_R_MEM_DATA_READ_SLOT_EMPTY) {
+    distribution_version_out->has_value = false;
+    return true;
+  } else if (ret != LT_OK) {
+    return false;
+  } else if (data_read_size != sizeof(distribution_version)) {
+    return false;
+  }
+  distribution_version_out->has_value = true;
+  distribution_version_out->value = distribution_version;
+  return true;
+}
+
+static bool verify_distribution_version(
+    uint32_t expected_distribution_version) {
+  optional_u32_t distribution_version = {0};
+  if (!tropic_get_distribution_version(
+          &distribution_version, TROPIC_CONFIG_DISTRIBUTION_VERSION_SLOT)) {
+    return false;
+  }
+
+  return distribution_version.has_value &&
+         distribution_version.value == expected_distribution_version;
+}
+
+static bool get_expected_tropic_distribution_version_from_batch_id(
+    const uint8_t *batch_id, uint32_t *expected_distribution_version_out) {
+  for (size_t i = 0;
+       i < sizeof(TROPIC_BATCHES_V1) / sizeof(TROPIC_BATCHES_V1[0]); i++) {
+    if (memcmp(batch_id, TROPIC_BATCHES_V1[i], sizeof(TROPIC_BATCHES_V1[0])) ==
+        0) {
+      *expected_distribution_version_out = 1;
+      return true;
+    }
+  }
+  *expected_distribution_version_out = 0;  // Default version
+  return true;
+}
+
+static bool get_expected_tropic_config(tropic_expected_config_t *config_out) {
   lt_chip_id_t chip_id = {0};
   if (TROPIC_RETRY_COMMAND(
           lt_get_info_chip_id(&g_tropic_driver.handle, &chip_id)) != LT_OK) {
-    return secfalse;
+    return false;
   }
 
-  tropic_config_t config = {0};
-  if (!tropic_get_configuration(chip_id.batch_id, &config)) {
-    return secfalse;
+  uint32_t expected_distribution_version = 0;
+  if (!get_expected_tropic_distribution_version_from_batch_id(
+          chip_id.batch_id, &expected_distribution_version)) {
+    return false;
   }
 
-  uint8_t set_version = UINT8_MAX;
-  uint16_t data_read_size = 0;
-  lt_ret_t ret = lt_r_mem_data_read_retry(
-      &g_tropic_driver.handle, TROPIC_CONFIG_VERSION_SLOT, &set_version,
-      sizeof(set_version), &data_read_size);
-  if (ret == LT_L3_R_MEM_DATA_READ_SLOT_EMPTY) {
-    // The slot is empty, which means the config has never been set. We will set
-    // it according to the batch_id.
-    set_version = UINT8_MAX;
-  } else if (ret != LT_OK || data_read_size != sizeof(set_version)) {
-    return secfalse;
+  return get_expected_tropic_config_from_distribution_version(
+      expected_distribution_version, config_out);
+}
+
+static bool set_backup_distribution_version(uint32_t distribution_version) {
+  optional_u32_t backup_distribution_version = {0};
+  if (!tropic_get_distribution_version(
+          &backup_distribution_version,
+          TROPIC_CONFIG_BACKUP_DISTRIBUTION_VERSION_SLOT)) {
+    return false;
   }
 
-  if (set_version == config.version) {
-    return sectrue;  // the set version is the expected one. We are done.
+  if (backup_distribution_version.has_value &&
+      backup_distribution_version.value == distribution_version) {
+    return true;
   }
 
-  if (set_version != UINT8_MAX) {
-    // If the version is set, we unset it before erasing the configuration, to
-    // make sure that if the process is interrupted in the middle, the device
-    // will not boot with a possibly incompatible config.
-    if (lt_r_mem_data_erase_retry(&g_tropic_driver.handle,
-                                  TROPIC_CONFIG_VERSION_SLOT) != LT_OK) {
-      return secfalse;
+  if (!backup_distribution_version.has_value) {
+    return lt_r_mem_data_write_retry(
+               &g_tropic_driver.handle,
+               TROPIC_CONFIG_BACKUP_DISTRIBUTION_VERSION_SLOT,
+               (uint8_t *)&distribution_version,
+               sizeof(distribution_version)) == LT_OK;
+  }
+
+  return lt_r_mem_data_erase_write_retry(
+             &g_tropic_driver.handle,
+             TROPIC_CONFIG_BACKUP_DISTRIBUTION_VERSION_SLOT,
+             (uint8_t *)&distribution_version,
+             sizeof(distribution_version)) == LT_OK;
+}
+
+// Applies `expected_config` and writes the new distribution version to slot 6.
+//
+// Crash-safety: the write order is designed so that a power-cut leaves slot 6
+// empty. On the next boot, tropic_set_config_main() detects the empty slot and
+// calls set_config_from_none(), which re-applies the config idempotently:
+// i_config writes only flip bits 1→0 (safe to repeat) and r_config is
+// rewritten only when the current value is too loose.
+//
+// Write order (when r_config must be updated):
+//   1. Erase slot 6            ← crash checkpoint: slot 6 empty → recovery on next boot
+//   2. Write r_config
+//   3. Write slot 6 (new ver)
+//   4. Erase slot 7 (backup)
+static bool set_expected_config(
+    const tropic_expected_config_t *expected_config,
+    tropic_r_config_write_mode_t r_config_write_mode) {
+  if (expected_config == NULL) {
+    return false;
+  }
+  if (tropic_ensure_i_config(expected_config->i_config) != sectrue) {
+    return false;
+  }
+
+  lt_config_t current_r_config = {0};
+  if (lt_read_whole_R_config_retry(&g_tropic_driver.handle,
+                                   &current_r_config) != LT_OK) {
+    return false;
+  }
+
+  bool write_r_config = false;
+  switch (r_config_write_mode) {
+    case TROPIC_R_CONFIG_WRITE_ALWAYS:
+      write_r_config = true;
+      break;
+    case TROPIC_R_CONFIG_WRITE_IF_TOO_LOOSE: {
+      tropic_config_strictness_t strictness = compare_config_strictness(
+          expected_config->min_r_config, &current_r_config);
+      if (strictness == TROPIC_CONFIG_STRICTNESS_FIRST_STRICTER) {
+        write_r_config = true;
+      } else if (strictness == TROPIC_CONFIG_STRICTNESS_EQUAL ||
+                 strictness == TROPIC_CONFIG_STRICTNESS_SECOND_STRICTER) {
+        write_r_config = false;
+      } else {
+        return false;
+      }
+      break;
     }
+    default:
+      return false;
   }
 
-  if (tropic_ensure_i_config(&config.irreversible) != sectrue) {
-    return secfalse;
+  if (write_r_config && lt_r_mem_data_erase_retry(
+                            &g_tropic_driver.handle,
+                            TROPIC_CONFIG_DISTRIBUTION_VERSION_SLOT) != LT_OK) {
+    return false;
   }
 
-  if (tropic_ensure_r_config(&config.reversible) != sectrue) {
-    return secfalse;
+  if (write_r_config &&
+      tropic_ensure_r_config(expected_config->max_r_config) != sectrue) {
+    return false;
   }
 
-  uint8_t new_version = config.version;
-
-  ret = lt_r_mem_data_write_retry(&g_tropic_driver.handle,
-                                  TROPIC_CONFIG_VERSION_SLOT, &new_version,
-                                  sizeof(new_version));
-  if (ret != LT_OK) {
-    return secfalse;
+  uint32_t distribution_version = expected_config->distribution_version;
+  if (lt_r_mem_data_write_retry(&g_tropic_driver.handle,
+                                TROPIC_CONFIG_DISTRIBUTION_VERSION_SLOT,
+                                (uint8_t *)&distribution_version,
+                                sizeof(distribution_version)) != LT_OK) {
+    return false;
   }
-
-  ret = lt_r_mem_data_read_retry(&g_tropic_driver.handle,
-                                 TROPIC_CONFIG_VERSION_SLOT, &set_version,
-                                 sizeof(set_version), &data_read_size);
-  if (ret != LT_OK || data_read_size != sizeof(new_version) ||
-      set_version != new_version) {
-    return secfalse;
+  if (!verify_distribution_version(distribution_version)) {
+    return false;
   }
+  if (lt_r_mem_data_erase_retry(
+          &g_tropic_driver.handle,
+          TROPIC_CONFIG_BACKUP_DISTRIBUTION_VERSION_SLOT) != LT_OK) {
+    return false;
+  }
+  return true;
+}
 
-  // We also need to restart the chip for the changes to take effect.
+static bool set_config_upgrade(
+    const tropic_expected_config_t *expected_config) {
+  return set_expected_config(expected_config, TROPIC_R_CONFIG_WRITE_ALWAYS);
+}
+
+static bool set_config_from_none(
+    const tropic_expected_config_t *expected_config) {
+  return set_expected_config(expected_config,
+                             TROPIC_R_CONFIG_WRITE_IF_TOO_LOOSE);
+}
+
+// Reads the chip's current distribution state and applies the expected config.
+//
+// Slot 6 = current distribution version; slot 7 = backup used during upgrade.
+// The four observable states and their meaning:
+//
+//   slot 6 empty, slot 7 empty  → fresh chip; call set_config_from_none()
+//   slot 6 empty, slot 7 set    → interrupted upgrade (power-cut during step 1–2
+//                                  of set_expected_config); recover via set_config_from_none()
+//   slot 6 set,   slot 7 set    → upgrade wrote slot 6 but not yet erased slot 7;
+//                                  treat as current==slot6; backup is ignored
+//   slot 6 set,   slot 7 empty  → steady state
+//
+// Upgrade path (slot 6 < expected): write old version to slot 7 *before* erasing
+// slot 6, so the "slot 6 empty" crash-recovery checkpoint always carries the prior
+// version in slot 7 for diagnostic purposes.
+static tropic_config_set_result_t tropic_set_config_main(void) {
+  tropic_expected_config_t expected_config = {0};
+  if (!get_expected_tropic_config(&expected_config)) {
+    return TROPIC_CONFIG_SET_FAILED;
+  }
+  optional_u32_t current_distribution_version = {0};
+  if (!tropic_get_distribution_version(
+          &current_distribution_version,
+          TROPIC_CONFIG_DISTRIBUTION_VERSION_SLOT)) {
+    return TROPIC_CONFIG_SET_FAILED;
+  }
+  if (!current_distribution_version.has_value) {
+    optional_u32_t backup_distribution_version = {0};
+    if (!tropic_get_distribution_version(
+            &backup_distribution_version,
+            TROPIC_CONFIG_BACKUP_DISTRIBUTION_VERSION_SLOT)) {
+      return TROPIC_CONFIG_SET_FAILED;
+    }
+    if (backup_distribution_version.has_value &&
+        backup_distribution_version.value >
+            expected_config.distribution_version) {
+      return TROPIC_CONFIG_SET_FAILED;
+    }
+
+    if (!set_config_from_none(&expected_config)) {
+      return TROPIC_CONFIG_SET_FAILED;
+    }
+    return TROPIC_CONFIG_SET_CHANGED;
+  }
+  if (current_distribution_version.value <
+      expected_config.distribution_version) {
+    if (!set_backup_distribution_version(current_distribution_version.value)) {
+      return TROPIC_CONFIG_SET_FAILED;
+    }
+    if (!set_config_upgrade(&expected_config)) {
+      return TROPIC_CONFIG_SET_FAILED;
+    }
+    return TROPIC_CONFIG_SET_CHANGED;
+  }
+  // current >= expected: chip is already at or ahead of the expected
+  // distribution. If ahead (downgrade scenario), preserve it unchanged.
+  return TROPIC_CONFIG_SET_UNCHANGED;
+}
+
+static secbool tropic_restart_chip(void) {
 #ifndef TREZOR_EMULATOR
   tropic01_reset();
 #endif
@@ -652,35 +997,24 @@ secbool tropic_ensure_configuration(void) {
   if (!tropic_wait_for_ready(NULL)) {
     return secfalse;
   }
-
   return sectrue;
 }
 
-secbool tropic_get_configuration(const uint8_t *batch_id, tropic_config_t *config) {
-  uint8_t config_version = 0;
-  // Find the version of config that belongs to the batch_id.
-  // Version 0 is default.
-  for (size_t i = 0;
-       i < sizeof(TROPIC_BATCHES_V1) / sizeof(TROPIC_BATCHES_V1[0]);
-       i++) {
-    if (memcmp(batch_id, TROPIC_BATCHES_V1[i],
-               sizeof(TROPIC_BATCHES_V1[0])) == 0) {
-      config_version = 1;
-      break;
-    }
+secbool tropic_ensure_configuration(void) {
+  if (!tropic_session_start()) {
+    return secfalse;
   }
 
-  // return the config with the corresponding version.
-  for (size_t i = 0; i < tropic_config_count; i++) {
-    if (tropic_configs[i].version == config_version) {
-      *config = tropic_configs[i];
-      return sectrue;
-    }
+  tropic_config_set_result_t result = tropic_set_config_main();
+  if (result == TROPIC_CONFIG_SET_FAILED) {
+    return secfalse;
+  }
+  if (result == TROPIC_CONFIG_SET_UNCHANGED) {
+    return sectrue;
   }
 
-  // Unreachable, because every batch_id is assigned a version at the beginning
-  // of this function
-  return secfalse;
+  // We also need to restart the chip for the changes to take effect.
+  return tropic_restart_chip();
 }
 
 #ifdef TREZOR_EMULATOR
@@ -848,17 +1182,6 @@ void tropic_random_buffer_time(uint32_t *time_ms) {
 }
 
 #ifdef USE_STORAGE
-
-static lt_ret_t lt_r_mem_data_erase_write(lt_handle_t *h,
-                                          const uint16_t udata_slot,
-                                          uint8_t *data, const uint16_t size) {
-  lt_ret_t ret = lt_r_mem_data_erase(h, udata_slot);
-  if (ret != LT_OK) {
-    return ret;
-  }
-
-  return lt_r_mem_data_write(h, udata_slot, data, size);
-}
 
 // Defined in tropic01.c
 void tropic_set_ui_progress(tropic_ui_progress_t f);
