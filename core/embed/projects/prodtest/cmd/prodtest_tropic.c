@@ -1791,13 +1791,17 @@ static bool tropic_ensure_session(cli_t* cli, bool* unprivileged) {
 }
 
 // Stress test: reinitialize the chip repeatedly to provoke startup faults.
-static bool tropic_stress_init_impl(cli_t* cli, uint32_t iterations) {
-  cli_trace(cli, "Initialization iterations: %d.", iterations);
+static bool tropic_stress_init_impl(cli_t* cli, uint32_t iterations,
+                                    uint32_t delay_ms) {
+  cli_trace(cli, "Initialization iterations: %d. Init delay: %d ms.",
+            iterations, delay_ms);
 
   g_tropic_handshake_state = TROPIC_HANDSHAKE_STATE_0;
 
   for (int i = 0; i < iterations; i++) {
     tropic_deinit();
+    // Simulate a delay between suspend and wake-up.
+    systick_delay_ms(delay_ms);
     if (!tropic_init()) {
       cli_error(cli, PRODTEST_ERR_TROPIC_STRESS_INIT,
                 "Call #%d of `tropic_init()` failed", i + 1);
@@ -2335,10 +2339,25 @@ static bool tropic_parse_iterations_and_slots(cli_t* cli, uint32_t* iterations,
 
 static void prodtest_tropic_stress_init(cli_t* cli) {
   uint32_t iterations = 80;
-  if (!tropic_parse_iterations(cli, &iterations)) {
+  uint32_t delay_ms = 0;
+  uint32_t argc = cli_arg_count(cli);
+  if (argc > 2) {
+    cli_error_arg_count(cli);
     return;
   }
-  if (!tropic_stress_init_impl(cli, iterations)) {
+  if (argc >= 1 && !cli_arg_uint32(cli, "iterations", &iterations)) {
+    cli_error_arg(cli, "Expecting number of iterations.");
+    return;
+  }
+  if (argc >= 2 && !cli_arg_uint32(cli, "delay-ms", &delay_ms)) {
+    cli_error_arg(cli, "Expecting init delay in ms.");
+    return;
+  }
+  if (iterations == 0) {
+    cli_error_arg(cli, "Iterations must be greater than 0.");
+    return;
+  }
+  if (!tropic_stress_init_impl(cli, iterations, delay_ms)) {
     return;
   }
   cli_ok(cli, "");
@@ -2452,13 +2471,13 @@ static void prodtest_tropic_test(cli_t* cli) {
     cli_error_arg_count(cli);
     return;
   }
-  if (!tropic_stress_init_impl(cli, 10) ||
+  if (!tropic_stress_init_impl(cli, 100, 0) ||
       !tropic_stress_session_impl(cli, 5) ||
-      !tropic_test_mac_and_destroy_impl(cli, 2, 32, -1) ||
-      !tropic_sign_impl(cli, 5, 5) ||
-      !tropic_test_counter_impl(cli, 3, 8, -1) ||
-      !tropic_test_rmem_impl(cli, 1, 10, -1) ||
-      !tropic_test_rng_impl(cli, 10)) {
+      !tropic_test_mac_and_destroy_impl(cli, 1, 24, -1) ||
+      !tropic_sign_impl(cli, 10, 5) ||
+      !tropic_test_counter_impl(cli, 3, 16, -1) ||
+      !tropic_test_rmem_impl(cli, 1, 20, -1) ||
+      !tropic_test_rng_impl(cli, 20)) {
     return;
   }
   cli_ok(cli, "");
@@ -3028,7 +3047,7 @@ PRODTEST_CLI_CMD(
   .name = "tropic-stress-init",
   .func = prodtest_tropic_stress_init,
   .info = "Stress test Tropic initialization",
-  .args = "[<iterations>]"
+  .args = "[<iterations> [<delay-ms>]]"
 );
 
 PRODTEST_CLI_CMD(

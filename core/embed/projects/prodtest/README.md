@@ -1485,7 +1485,7 @@ The commands that test multiple slots select them pseudorandomly deterministical
 
 | Command | Arguments | Description |
 |---|---|---|
-| `tropic-stress-init` | `[<iterations>]` | Repeatedly reinitialize the chip. |
+| `tropic-stress-init` | `[<iterations> [<delay-ms>]]` | Repeatedly reinitialize the chip, waiting `<delay-ms>` between deinit and init. |
 | `tropic-stress-session` | `[<iterations>]` | Repeatedly tear down and re-establish the secure session. |
 | `tropic-stress-mac-and-destroy` | `[<iterations> <slot-count> [<slot>]]` | Hammer MAC-and-destroy on a sample of slots with random inputs. |
 | `tropic-stress-sign` | `[<iterations>]` | Generate EdDSA signatures repeatedly without verification. |
