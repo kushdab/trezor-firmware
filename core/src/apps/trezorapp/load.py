@@ -5,8 +5,10 @@ from storage.cache import get_sessionless_cache
 from trezor import app
 from trezor.crypto import random
 from trezor.messages import (
-    DataChunkAck,
-    DataChunkRequest,
+    TrezorAppDataChunkAck,
+    TrezorAppDataChunkRequest,
+    TrezorAppHeaderAck,
+    TrezorAppHeaderRequest,
     TrezorAppLoad,
     TrezorAppLoaded,
 )
@@ -15,13 +17,13 @@ from trezor.wire.errors import DataError
 
 
 def image_matches(image: app.AppImage, msg: TrezorAppLoad) -> bool:
-    if not image.is_verified():
+    if not image.is_ready():
         return False
     if image.get_id() != msg.id:
         return False
     if image.get_version() < tuple(msg.version):
         return False
-    if msg.hash != b"" and image.get_hash() != msg.hash:
+    if msg.hash != b"" and image.get_header_hash() != msg.hash:
         return False
     return True
 
@@ -30,27 +32,30 @@ async def _load_image(msg: TrezorAppLoad) -> app.AppImage:
     from trezor import app
     from trezor.ui.layouts.progress import progress
 
-    image = app.create_image()
-    offset = 0
+    binary = await context.call(
+        TrezorAppHeaderRequest(),
+        TrezorAppHeaderAck,
+    )
+
+    image = app.create_image(binary.header, binary.proof)
+
     prog = progress("Loading app...")
-    while offset < msg.size:
-        prog.report(int(offset / msg.size * 1000))
-        chunk = (
-            await context.call(
-                DataChunkRequest(
-                    data_length=min(msg.size - offset, 1024), data_offset=offset
-                ),
-                DataChunkAck,
-            )
-        ).data_chunk
-        if len(chunk) != min(msg.size - offset, 1024):
-            raise DataError("Data length mismatch")
-        image.write_chunk(chunk)
-        offset += len(chunk)
-    image.verify(b"")  # !@# TODO use real proof
+    chunk_size = image.get_chunk_size()
+    chunk_count = (image.get_size() + chunk_size - 1) // chunk_size
+    for chunk_index in range(chunk_count):
+        prog.report(int(chunk_index / chunk_count * 1000))
+        chunk = await context.call(
+            TrezorAppDataChunkRequest(
+                index=chunk_index,
+            ),
+            TrezorAppDataChunkAck,
+        )
+        image.write_chunk(chunk.data, chunk.hash)
+
     if not image_matches(image, msg):
         image.delete()
         raise DataError("Loaded image does not match the expected app")
+
     prog.stop()
     return image
 
