@@ -165,7 +165,7 @@ async def confirm_claim(
             description=TR.tron__owner_address,
             address=owner_address,
             verb=TR.buttons__continue,
-            footer=(TR.tron__not_your_address_footer, True),
+            footer=(TR.address__warning_not_yours, True),
             chunkify=True,
         )
 
