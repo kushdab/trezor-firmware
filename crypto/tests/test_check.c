@@ -11802,6 +11802,10 @@ START_TEST(test_noise_xxpsk3) {
   ret = noise_xxpsk3_responder_init(&responder, psk, responder_private_key);
   ck_assert_int_eq(ret, false);
 
+  // Both sides must have the same handshake hash
+  ck_assert_mem_eq(initiator.state.transport_state.handshake_hash,
+                   responder.state.transport_state.handshake_hash, HASHLEN);
+
   // Cleanup
   noise_xxpsk3_initiator_deinit(&initiator);
   noise_xxpsk3_responder_deinit(&responder);
@@ -11826,6 +11830,7 @@ START_TEST(test_noise_xxpsk3_vectors) {
     const char *expected_response1;
     const char *expected_request2;
     const char *expected_response2;
+    const char *expected_handshake_hash;
   } vectors[] = {
       {
           2748932008,
@@ -11843,6 +11848,7 @@ START_TEST(test_noise_xxpsk3_vectors) {
           "eb6bcf7f7cb49f2b4008f5e22e828113fcebfcc397c2d15ad2143acda60c",
           "84e5c9691e9f0395a74341ad18c672962ea4bcd575af5fb5b72b843f3c55fe28d528"
           "48f0",
+          "59849c6fa61ecef55d169cc05d632b3ac1f5387b16a7481ebdce34d409404609",
       },
       {
           1234567890,
@@ -11859,6 +11865,7 @@ START_TEST(test_noise_xxpsk3_vectors) {
           "d5cc0a789761819b15731432b19b2a33e40c335e41f0261a82a2a7ec24e32e65d57d"
           "063903224ff97426ff08083e4701be63f27a04b43bb187ce0c052dc0d23c",
           "112c0758fc19bee17e15f64699fb32b678460086f4272f2d6ecbff145868",
+          "3c41fb49fcb607180753894e365237aab98b5958b681820728b68d7ab2e09f62",
       },
       {
           42,
@@ -11875,6 +11882,7 @@ START_TEST(test_noise_xxpsk3_vectors) {
           "9778efde6ba8636f48975d6cf93387fe2897e977e547d0c84682da33744914662f2e"
           "64bb96cc91ec2d06ba44a63f07c65857e2b89423f17b749b88b93f239008",
           "9ab227703e18c353b931eafa629159138d926ff1bc",
+          "1dcd038e6706a62b35d3facaa1baddba5ed70a7f08c7e3a59c74eeb38200d207",
       },
       {
           2748932008,
@@ -11893,6 +11901,7 @@ START_TEST(test_noise_xxpsk3_vectors) {
           "2",
           "81e1dc2505d700c7ae4114ad09dd229b25e0aece4e1faff58b1f17b78e4bfdf652ea"
           "7c71c7101edd7108",
+          "e4f7077c6783be54aa0b9e23646e34a8916232a14b53b64ad293e0d66864026a",
       },
       {
           2748932008,
@@ -11913,6 +11922,7 @@ START_TEST(test_noise_xxpsk3_vectors) {
           "2bfa115d4ed379dfad10f47bdcbe93",
           "9ee5d3601fd800c7a74841ab15d0229f29a6adcfd1e4ce6c6ffe9d39c152d16f49f5"
           "4d5f",
+          "73b0823f46b0e23560501cf82732c9e486673eadac549d38a4d71252face472a",
       },
   };
 
@@ -12004,6 +12014,12 @@ START_TEST(test_noise_xxpsk3_vectors) {
     ck_assert_int_eq(ret, true);
     ck_assert_int_eq(rsp2_dec_size, tmsg_len);
     if (tmsg_len) ck_assert_mem_eq(rsp2_dec, tmsg, tmsg_len);
+
+    // Check handshake hash
+    ck_assert_mem_eq(initiator.state.transport_state.handshake_hash,
+                     responder.state.transport_state.handshake_hash, HASHLEN);
+    ck_assert_mem_eq(initiator.state.transport_state.handshake_hash,
+                     fromhex(vectors[v].expected_handshake_hash), HASHLEN);
   }
 }
 END_TEST
