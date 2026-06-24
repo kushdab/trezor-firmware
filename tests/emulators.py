@@ -43,7 +43,6 @@ CORE_SRC_DIR = ROOT / "core" / "src"
 
 ENV = {"SDL_VIDEODRIVER": "dummy"}
 
-TROPIC_MODEL_CONFIGFILE = ROOT / "tests" / "tropic_model" / "config.yml"
 TROPIC_CAPABLE_MODELS = {"T3W1"}
 
 
