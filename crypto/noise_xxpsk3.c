@@ -489,13 +489,15 @@ cleanup:
 }
 
 bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
-                                            const uint8_t *msg,
-                                            size_t msg_len) {
+                                            const uint8_t *msg, size_t msg_len,
+                                            uint8_t *payload,
+                                            size_t *payload_size) {
   noise_xxpsk3_state_t *state = &rspn->state;
 
   if (!rspn->initialized || msg == NULL ||
       rspn->handshake_stage != WAITING_FOR_REQUEST2 ||
-      !state->has_ephemeral_private) {
+      !state->has_ephemeral_private || payload_size == NULL ||
+      payload == NULL) {
     goto cleanup;
   }
   // Check if message is large enough to contain the encrypted remote static
@@ -520,20 +522,18 @@ bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
 
   ss_mix_key_and_hash(&state->symmetric_state, &state->psk);
 
-  size_t encrypted_payload_len = msg_len - (DHLEN + NOISE_TAG_SIZE_BYTES);
+  size_t ciphertext_len = msg_len - (DHLEN + NOISE_TAG_SIZE_BYTES);
 
-  if (encrypted_payload_len >
-      (NOISE_MAX_PAYLOAD_BYTES + NOISE_TAG_SIZE_BYTES)) {
+  if (ciphertext_len > (NOISE_MAX_PAYLOAD_BYTES + NOISE_TAG_SIZE_BYTES)) {
     goto cleanup;
   }
-
-  uint8_t payload[NOISE_MAX_PAYLOAD_BYTES];
 
   if (!ss_decrypt_and_hash(&state->symmetric_state,
-                           msg + DHLEN + NOISE_TAG_SIZE_BYTES,
-                           encrypted_payload_len, payload)) {
+                           msg + DHLEN + NOISE_TAG_SIZE_BYTES, ciphertext_len,
+                           payload)) {
     goto cleanup;
   }
+  *payload_size = ciphertext_len - NOISE_TAG_SIZE_BYTES;
 
   ss_ts_split(&state->symmetric_state, &state->transport_state, false);
 
@@ -627,8 +627,7 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
   uint8_t input_key_material[DHLEN] = {0};
 
   if (!intr->initialized || intr->handshake_stage != WAITING_FOR_RESPONSE1 ||
-      msg == NULL || payload_size == NULL ||
-      (payload == NULL && payload_size > 0)) {
+      msg == NULL || payload_size == NULL || payload == NULL) {
     goto cleanup;
   }
   if (msg_len < 2 * DHLEN + 2 * NOISE_TAG_SIZE_BYTES) {
@@ -657,15 +656,20 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
      &state->remote_static_public);
   ss_mix_key(&state->symmetric_state, &input_key_material);
 
-  // decrypt received payload
-  if (!ss_decrypt_and_hash(
-          &state->symmetric_state, msg + (2 * DHLEN + NOISE_TAG_SIZE_BYTES),
-          msg_len - (2 * DHLEN + NOISE_TAG_SIZE_BYTES), payload)) {
+  size_t ciphertext_len = msg_len - (2 * DHLEN + NOISE_TAG_SIZE_BYTES);
+
+  if (ciphertext_len > (NOISE_MAX_PAYLOAD_BYTES + NOISE_TAG_SIZE_BYTES)) {
+    goto cleanup;
+  }
+
+  if (!ss_decrypt_and_hash(&state->symmetric_state,
+                           msg + (2 * DHLEN + NOISE_TAG_SIZE_BYTES),
+                           ciphertext_len, payload)) {
     goto cleanup;
   }
 
   memzero(input_key_material, sizeof(input_key_material));
-  *payload_size = msg_len - (2 * DHLEN + 2 * NOISE_TAG_SIZE_BYTES);
+  *payload_size = ciphertext_len - NOISE_TAG_SIZE_BYTES;
 
   intr->handshake_stage = READY_FOR_REQUEST2;
 

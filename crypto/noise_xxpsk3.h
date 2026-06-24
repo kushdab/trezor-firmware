@@ -311,10 +311,14 @@ bool noise_xxpsk3_responder_create_response1(
  * @param rspn Pointer to the responder structure
  * @param msg Incoming message buffer
  * @param msg_len Length of the incoming message buffer
+ * @param payload Output buffer for the decrypted payload
+ * @param payload_size Set to the number of decrypted payload bytes
  * @return true if the message was handled correctly, false otherwise
  */
 bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
-                                            const uint8_t *msg, size_t msg_len);
+                                            const uint8_t *msg, size_t msg_len,
+                                            uint8_t *payload,
+                                            size_t *payload_size);
 
 #endif /* USE_NOISE_RESPONDER */
 
