@@ -31,18 +31,34 @@
 
 /// package: trezorapp
 
-/// def create_image() -> AppImage:
+/// def create_image(header: AnyBytes, proof: AnyBytes) -> AppImage:
 ///     """
-///     Creates a new empty application image. The returned handle
-///     can be used to load the image content and run it.
+///     Creates a new application image from header and proof.
+///     The returned handle can be used to load the rest of the
+///     image content and run it.
 ///     """
-STATIC mp_obj_t mod_trezorapp_create_image(void) {
+STATIC mp_obj_t mod_trezorapp_create_image(mp_obj_t header_obj,
+                                           mp_obj_t proof_obj) {
   app_image_handle_t handle = APP_IMAGE_HANDLE_INVALID;
-  ts_t status = app_arena_create_image(&handle);
+
+  mp_buffer_info_t header_buf;
+  mp_get_buffer_raise(header_obj, &header_buf, MP_BUFFER_READ);
+
+  mp_buffer_info_t proof_buf;
+  mp_get_buffer_raise(proof_obj, &proof_buf, MP_BUFFER_READ);
+
+  if (proof_buf.len % sizeof(sha256_digest_t) != 0) {
+    mp_raise_ValueError(MP_ERROR_TEXT("Invalid Merkle proof length"));
+  }
+
+  ts_t status = app_arena_create_image(header_buf.buf, header_buf.len,
+                                       proof_buf.buf, proof_buf.len, &handle);
+
   if (ts_eq(status, TS_ENOMEM)) {
     mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("Not enough memory"));
-  }
-  if (ts_error(status)) {
+  } else if (ts_eq(status, TS_EINVAL)) {
+    mp_raise_ValueError(MP_ERROR_TEXT("Invalid image header"));
+  } else if (ts_error(status)) {
     mp_raise_msg(&mp_type_RuntimeError,
                  MP_ERROR_TEXT("Failed to create app image"));
   }
@@ -52,7 +68,7 @@ STATIC mp_obj_t mod_trezorapp_create_image(void) {
   o->handle = handle;
   return MP_OBJ_FROM_PTR(o);
 }
-STATIC MP_DEFINE_CONST_FUN_OBJ_0(mod_trezorapp_create_image_obj,
+STATIC MP_DEFINE_CONST_FUN_OBJ_2(mod_trezorapp_create_image_obj,
                                  mod_trezorapp_create_image);
 
 /// def get_image_by_index(idx: int) -> AppImage | None:

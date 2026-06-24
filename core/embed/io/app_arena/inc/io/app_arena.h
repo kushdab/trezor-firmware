@@ -21,29 +21,40 @@
 
 #include <trezor_types.h>
 
+#include <rtl/crypto_helpers.h>
 #include <sys/systask.h>
 
 #define APP_IMAGE_HANDLE_INVALID 0
 
 #define APP_IMAGE_MAX_ID_LEN 32
+#define APP_IMAGE_MAX_NAME_LEN 32
+#define APP_IMAGE_MAX_VENDOR_LEN 32
 
 /** Handle for a loaded application image. */
 typedef uint32_t app_image_handle_t;
 
 /** Information about a loaded application image. */
 typedef struct {
-  /** Set if image was verified successfully. */
-  bool verified;
+  /** Set if image was fully loaded and verified */
+  bool ready;
   /** Set if image is currently running. */
   bool running;
-  /** Identification of the loaded image. */
+  /** Unique identification of the application. */
   char id[APP_IMAGE_MAX_ID_LEN];
-  /** Version of the loaded image. */
+  /** Name of the loaded application. */
+  char name[APP_IMAGE_MAX_NAME_LEN];
+  /** Vendor of the loaded application. */
+  char vendor[APP_IMAGE_MAX_VENDOR_LEN];
+  /** Version of the application. */
   uint32_t version;
-  /** ID of the task running the image (or 0 if not running). */
+  /** ID of the running task  (or 0 if not running). */
   systask_id_t task_id;
-  /** Size of the image in bytes. */
+  /** Size of the image payload in bytes. */
   size_t image_size;
+  /** Size of each chunk of the payload in bytes */
+  size_t chunk_size;
+  /** Calculated hash of the image header */
+  sha256_digest_t header_hash;
 } app_image_info_t;
 
 /** Information about the application arena. */
@@ -87,12 +98,20 @@ ts_t app_arena_clear_event(void);
 /**
  * @brief Creates a new empty image in the application arena.
  *
+ * @param header Pointer to the image header data.
+ * @param header_size Size of the image header data in bytes.
+ * @param proof Pointer to the Merkle proof data for signature
+ * verification.
+ * @param proof_len Number of sha256_digest_t elements in the proof array.
  * @param handle Pointer to store the handle of the newly allocated image.
  *
  * @return TS_OK on success, or an error code on failure.
+ *         TS_EINVAL if the header is invalid.
  *         TS_ENOMEM if there is not enough memory to allocate a new image.
  */
-ts_t app_arena_create_image(app_image_handle_t *handle);
+ts_t app_arena_create_image(const void *header, size_t header_size,
+                            const sha256_digest_t *proof, size_t proof_len,
+                            app_image_handle_t *handle);
 
 /**
  * @brief Returns a handle of a loaded image by its index.
@@ -125,13 +144,14 @@ ts_t app_image_get_info(app_image_handle_t handle, app_image_info_t *info);
  * @param handle Handle of the image to write to.
  * @param data Pointer to the data to write.
  * @param size Size of the data in bytes.
+ * @param hash Pointer to the SHA-256 hash of the chunk chain
  * @return TS_OK on success, or an error code on failure.
  *         TS_ENOENT if the image handle is invalid.
  *         TS_ENOMEM if there is not enough memory to write the data.
  *         TS_EINVAL if the image is not in the loading state.
  */
 ts_t app_image_write_chunk(app_image_handle_t handle, const void *data,
-                           size_t size);
+                           size_t size, const sha256_digest_t *hash);
 
 /**
  * @brief Verifies a loaded application image.
@@ -143,13 +163,13 @@ ts_t app_image_write_chunk(app_image_handle_t handle, const void *data,
  * @param handle Handle of the image to verify.
  * @param proof Pointer to the Merkle proof data for signature
  * verification.
- * @param proof_size Size of the Merkle proof data in bytes.
+ * @param proof_len Number of sha256_digest_t elements in the proof array.
  * @return TS_OK on success, or an error code on failure.
  *         TS_ENOENT if the image handle is invalid.
  *         TS_EINVAL if the image is invalid.
  */
-ts_t app_image_verify(app_image_handle_t handle, const void *proof,
-                      size_t proof_size);
+ts_t app_image_verify(app_image_handle_t handle, const sha256_digest_t *proof,
+                      size_t proof_len);
 
 /**
  * @brief Deletes a loaded application image.

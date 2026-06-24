@@ -27,8 +27,7 @@
 #include <sys/coreapp.h>
 #include <sys/mpu.h>
 
-// #include "../app_arena.h"
-#include "../xbin_loader.h"
+#include "../app_loader.h"
 
 // Alignment required for MPU regions
 #define MPU_ALIGNMENT 32
@@ -64,13 +63,10 @@ typedef struct {
   uint32_t runtime_flags;
   // Reserved for future use
   uint32_t _reserved[5];
-} payload_header_t;
+} app_payload_header_t;
 
-_Static_assert(sizeof(payload_header_t) == 64,
-               "payload_header_t must be 64 bytes");
-
-_Static_assert(sizeof(xbin_header_t) % MPU_ALIGNMENT == 0,
-               "xbin_header_t must be 32-byte aligned");
+_Static_assert(sizeof(app_payload_header_t) == 64,
+               "app_payload_header_t must be 64 bytes");
 
 typedef struct {
   // RO segment (from original elf)
@@ -112,41 +108,28 @@ static uint8_t* map_va(const va_map_t* map, uint32_t va) {
   return map_va_size(map, va, 0);
 }
 
-const xbin_header_t* xbin_verify_image(const void* image, size_t image_size) {
+ts_t app_loader_verify_payload(const app_header_t* header, const void* payload,
+                               size_t payload_size) {
   TSH_DECLARE;
-  const xbin_header_t* retval = NULL;
 
-  TSH_CHECK(image != NULL, TS_EINVAL);
-  TSH_CHECK(image_size >= sizeof(xbin_header_t), TS_EINVAL);
-  TSH_CHECK(IS_ALIGNED((uintptr_t)image, MPU_ALIGNMENT), TS_EINVAL);
-  TSH_CHECK(IS_ALIGNED(image_size, MPU_ALIGNMENT), TS_EINVAL);
+  TSH_CHECK(header != NULL, TS_EINVAL);
+  TSH_CHECK(payload != NULL, TS_EINVAL);
 
-  const xbin_header_t* header = (const xbin_header_t*)image;
+  TSH_CHECK(IS_ALIGNED((uintptr_t)payload, MPU_ALIGNMENT), TS_EINVAL);
 
-  TSH_CHECK(header->magic == XBIN_HEADER_MAGIC, TS_EINVAL);
-  TSH_CHECK(header->header_size >= sizeof(xbin_header_t), TS_EINVAL);
-  TSH_CHECK(IS_ALIGNED(header->header_size, MPU_ALIGNMENT), TS_EINVAL);
-  TSH_CHECK(header->header_size <= image_size, TS_EINVAL);
-  TSH_CHECK(header->abi_version == 1, TS_EINVAL);
-  TSH_CHECK(header->payload_type == XBIN_TARGET_ARMV8M, TS_EINVAL);
-  TSH_CHECK(header->payload_size >= sizeof(payload_header_t), TS_EINVAL);
-  TSH_CHECK(IS_ALIGNED(header->payload_size, MPU_ALIGNMENT), TS_EINVAL);
-  TSH_CHECK(header->payload_size + header->header_size == image_size,
-            TS_EINVAL);
+  TSH_CHECK(payload_size >= sizeof(app_payload_header_t), TS_EINVAL);
+  TSH_CHECK(IS_ALIGNED(payload_size, MPU_ALIGNMENT), TS_EINVAL);
+  TSH_CHECK(payload_size == header->payload_size, TS_EINVAL);
 
-  const payload_header_t* p =
-      (const payload_header_t*)((const uint8_t*)header + header->header_size);
+  TSH_CHECK(header->payload_type == APP_TARGET_ARMV8M, TS_EINVAL);
 
-  uint32_t raw_data_size = header->payload_size - sizeof(payload_header_t);
+  const app_payload_header_t* p = (const app_payload_header_t*)payload;
+
+  uint32_t raw_data_size = header->payload_size - sizeof(app_payload_header_t);
 
   // Check that ro segment size and relocations fit within the image
   TSH_CHECK(p->ro_size <= raw_data_size, TS_EINVAL);
   TSH_CHECK(p->reloc_count <= (raw_data_size - p->ro_size) / 4, TS_EINVAL);
-
-  // Check whether the total image size (including RO segment and relocations)
-  // fits within the provided image size
-  TSH_CHECK(header->header_size + header->payload_size <= image_size,
-            TS_EINVAL);
 
   // Check that RW segment size and address are valid
   TSH_CHECK(p->rw_va >= p->ro_size, TS_EINVAL);
@@ -168,32 +151,20 @@ const xbin_header_t* xbin_verify_image(const void* image, size_t image_size) {
   // Check that the entrypoint is within the RO segment
   TSH_CHECK(p->entry_va < p->ro_size, TS_EINVAL);
 
-  retval = header;
-
 cleanup:
-  return retval;
-}
-
-ts_t xbin_verify_signature(const xbin_header_t* header, const void* proof,
-                           size_t proof_size) {
-  TSH_DECLARE;
-
-  // TODO !@# verify signature as soons as the signing scheme is defined
-
-  // cleanup:
   TSH_RETURN;
 }
 
 #define STACK_ALIGNMENT 8
 
-static ts_t xbin_fit_in_memory(const payload_header_t* p, void* rwmem,
+static ts_t xbin_fit_in_memory(const app_payload_header_t* p, void* rwmem,
                                size_t rwmem_size, va_map_t* map) {
   TSH_DECLARE;
 
   TSH_CHECK(rwmem_size >= p->rw_size + p->stack_size + p->heap_size, TS_EINVAL);
 
   map->ro_v_addr = 0;
-  map->ro_p_addr = (uint32_t)p + sizeof(payload_header_t);
+  map->ro_p_addr = (uint32_t)p + sizeof(app_payload_header_t);
   map->ro_size = p->ro_size;
 
   map->rw_v_addr = p->rw_va;
@@ -233,13 +204,13 @@ typedef enum {
   RELOCATION_GROUP_RW = 1,
 } relocation_group_t;
 
-static ts_t xbin_apply_relocations(const payload_header_t* p,
+static ts_t xbin_apply_relocations(const app_payload_header_t* p,
                                    const va_map_t* map,
                                    relocation_group_t group) {
   TSH_DECLARE;
 
   uint32_t* reloc_table =
-      (uint32_t*)((uint8_t*)p + sizeof(payload_header_t) + p->ro_size);
+      (uint32_t*)((uint8_t*)p + sizeof(app_payload_header_t) + p->ro_size);
 
   uint32_t segment_addr = 0;
   uint32_t segment_size = 0;
@@ -281,8 +252,9 @@ cleanup:
   TSH_RETURN;
 }
 
-ts_t xbin_prepare_applet(const xbin_header_t* header, void* rwmem,
-                         size_t rwmem_size, applet_t* applet) {
+ts_t app_loader_prepare_applet(const app_header_t* header, void* payload,
+                               void* rwmem, size_t rwmem_size,
+                               applet_t* applet) {
   TSH_DECLARE;
   ts_t status;
 
@@ -291,8 +263,7 @@ ts_t xbin_prepare_applet(const xbin_header_t* header, void* rwmem,
   TSH_CHECK_ARG(IS_ALIGNED((uintptr_t)rwmem, MPU_ALIGNMENT));
   TSH_CHECK_ARG(IS_ALIGNED((uintptr_t)rwmem_size, MPU_ALIGNMENT));
 
-  payload_header_t* p =
-      (payload_header_t*)((const uint8_t*)header + header->header_size);
+  app_payload_header_t* p = (app_payload_header_t*)payload;
 
   status = xbin_fit_in_memory(p, rwmem, rwmem_size, &map);
   TSH_CHECK_OK(status);

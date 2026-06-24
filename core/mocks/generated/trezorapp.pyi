@@ -24,9 +24,9 @@ class AppImage:
         Checks if the application image is currently running.
         """
 
-    def is_verified(self) -> bool:
+    def is_ready(self) -> bool:
         """
-        Checks if the application image has been verified.
+        Checks if the application image has been fully loaded and verified.
         """
 
     def get_id(self) -> str:
@@ -34,28 +34,40 @@ class AppImage:
         Returns the ID of the application image.
         """
 
+    def get_size(self) -> int:
+        """
+        Returns the size of the application image in bytes.
+        """
+
+    def get_chunk_size(self) -> int:
+        """
+        Returns the size of the application image in bytes.
+        """
+
     def get_version(self) -> tuple[int, int]:
         """
         Returns the version of the application image as a tuple (major, minor).
         """
 
-    def get_hash(self) -> bytes:
+    def get_name(self) -> str:
         """
-        Returns the hash of the application image.
+        Returns the name of the application.
         """
 
-    def write_chunk(self, data: AnyBytes) -> None:
+    def get_vendor(self) -> str:
+        """
+        Returns the vendor of the application.
+        """
+
+    def get_header_hash(self) -> bytes:
+        """
+        Returns the hash of the application image header.
+        """
+
+    def write_chunk(self, data: AnyBytes, hash: AnyBytes | None = None) -> None:
         """
         Writes a chunk of image data into app-arena memory.
         Allowed only while the image is in the loading state.
-        Call verify() after all chunks are written.
-        """
-
-    def verify(self, merkle_proof: AnyBytes) -> None:
-        """
-        Validates image integrity and verifies its signature.
-        If verification succeeds, the image transitions to the
-        verified state.
         """
 
     def delete(self) -> None:
@@ -68,8 +80,8 @@ class AppImage:
 
     def run(self) -> int:
         """
-        Runs the loaded application image. Only verified images
-        are runnable. If the image is already running,
+        Runs the loaded application image. Only ready images (fully loaded and
+        verified images) are runnable. If the image is already running,
         this operation has no effect.
         """
 
@@ -81,10 +93,11 @@ class AppImage:
 
 
 # upymod/modtrezorapp/modtrezorapp.c
-def create_image() -> AppImage:
+def create_image(header: AnyBytes, proof: AnyBytes) -> AppImage:
     """
-    Creates a new empty application image. The returned handle
-    can be used to load the image content and run it.
+    Creates a new application image from header and proof.
+    The returned handle can be used to load the rest of the
+    image content and run it.
     """
 
 
