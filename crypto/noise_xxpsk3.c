@@ -409,6 +409,9 @@ bool noise_xxpsk3_responder_handle_request1(noise_xxpsk3_responder_t *rspn,
   memcpy(state->remote_ephemeral_public, msg, DHLEN);
   state->has_remote_ephemeral_public = true;
   ss_mix_hash(&state->symmetric_state, state->remote_ephemeral_public, DHLEN);
+
+  // Calling ss_mix_key is required in PSK mode. See specification, Section 9.2:
+  // https://noiseprotocol.org/noise.html#handshake-tokens
   ss_mix_key(&state->symmetric_state, &state->remote_ephemeral_public);
 
   // PSK mode established a key at the `e` token, so the payload is encrypted.
