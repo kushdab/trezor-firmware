@@ -70,6 +70,7 @@ typedef struct {
 
 #ifdef USE_NOISE_RESPONDER
 
+// Random values are used for greater resilience agains glitching attacks.
 typedef enum {
   WAITING_FOR_REQUEST1 = 0x5091d95c,
   READY_FOR_RESPONSE1 = 0x252d533a,
@@ -87,6 +88,7 @@ typedef struct {
 
 #ifdef USE_NOISE_INITIATOR
 
+// Random values are used for greater resilience agains glitching attacks.
 typedef enum {
   READY_FOR_REQUEST1 = 0x24a23a5e,
   WAITING_FOR_RESPONSE1 = 0xa748a792,
