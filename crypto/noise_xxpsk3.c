@@ -175,6 +175,9 @@ static void ss_ts_split(symmetric_state_t *ss, transport_state_t *ts,
 static void generate_keypair(uint8_t (*private_key)[DHLEN],
                              uint8_t (*public_key)[DHLEN]) {
   random_buffer(*private_key, DHLEN);
+  (*private_key)[0] &= 248;
+  (*private_key)[31] &= 127;
+  (*private_key)[31] |= 64;
   curve25519_scalarmult_basepoint(*public_key, *private_key);
 }
 
