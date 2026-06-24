@@ -174,20 +174,21 @@ bool noise_xxpsk3_initiator_create_request1(
  * operations, decrypts and authenticates the responder's static public key,
  * and decrypts the response payload.
  *
- * In:    Incoming message format:
+ * In:    Incoming response format:
  * <ephemeral_public_key[32B]><encrypted_static_public_key[48B]><encrypted_payload[payload_size
  * + 16B]>
  * Out:   Decrypted payload
  *
  * @param intr Pointer to the initiator structure
- * @param msg Incoming message buffer
- * @param msg_len Length of the incoming message buffer
+ * @param response Incoming response buffer
+ * @param response_len Length of the incoming response buffer
  * @param payload Output buffer for the decrypted payload
  * @param payload_size Set to the number of decrypted payload bytes
  * @return true if the response was handled correctly, false otherwise
  */
 bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
-                                             const uint8_t *msg, size_t msg_len,
+                                             const uint8_t *response,
+                                             size_t response_len,
                                              uint8_t *payload,
                                              size_t *payload_size);
 
@@ -267,17 +268,18 @@ void noise_xxpsk3_responder_deinit(noise_xxpsk3_responder_t *rspn);
  * the initiator's ephemeral public key. The payload is decrypted internally and
  * currently discarded.
  *
- * In:    Incoming message format:
+ * In:    Incoming request format:
  * <initiator_ephemeral_public_key[32B]><encrypted_payload[payload_size + 16B]>
  * Out:   No response
  *
  * @param rspn Pointer to the responder structure
- * @param msg Incoming message buffer
- * @param msg_len Length of the incoming message buffer
+ * @param request Incoming request buffer
+ * @param request_len Length of the incoming request buffer
  * @return true if the request was handled correctly, false otherwise
  */
 bool noise_xxpsk3_responder_handle_request1(noise_xxpsk3_responder_t *rspn,
-                                            const uint8_t *msg, size_t msg_len);
+                                            const uint8_t *request,
+                                            size_t request_len);
 
 /**
  * @brief Create response to the first handshake message.
@@ -311,14 +313,15 @@ bool noise_xxpsk3_responder_create_response1(
  * <encrypted_remote_static_public[48B]><encrypted_payload[payload_size + 16B]>
  *
  * @param rspn Pointer to the responder structure
- * @param msg Incoming message buffer
- * @param msg_len Length of the incoming message buffer
+ * @param request Incoming request buffer
+ * @param request_len Length of the incoming request buffer
  * @param payload Output buffer for the decrypted payload
  * @param payload_size Set to the number of decrypted payload bytes
- * @return true if the message was handled correctly, false otherwise
+ * @return true if the request was handled correctly, false otherwise
  */
 bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
-                                            const uint8_t *msg, size_t msg_len,
+                                            const uint8_t *request,
+                                            size_t request_len,
                                             uint8_t *payload,
                                             size_t *payload_size);
 
