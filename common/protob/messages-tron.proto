@@ -135,7 +135,7 @@ message TronWithdrawUnfreeze {
  * Request: Claim voting rewards (WithdrawBalanceContract)
  * @next TronSignature
  */
-// https://github.com/tronprotocol/protocol/blob/4c726956542b8dff5a4bd5c54aa07cd9da257d08/core/contract/balance_contract.proto#L52-L54
+// https://github.com/tronprotocol/protocol/blob/4c726956542b8dff5a4bd5c54aa07cd9da257d08/core/contract/balance_contract.proto#L28
 message TronWithdrawBalance {
     required bytes owner_address = 1;
 }

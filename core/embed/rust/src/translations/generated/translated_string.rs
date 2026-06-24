@@ -1629,8 +1629,7 @@ pub enum TranslatedString {
     tron__claim_unfrozen_balance = 1235,  // "Claim unfrozen balance?"
     #[cfg(feature = "universal_fw")]
     tron__claim_voting_rewards = 1236,  // "Claim voting rewards?"
-    #[cfg(feature = "universal_fw")]
-    tron__not_your_address_footer = 1237,  // {"Bolt": "", "Caesar": "", "Delizia": "", "Eckhart": "This is NOT your address"}
+    address__warning_not_yours = 1237,  // {"Bolt": "", "Caesar": "", "Delizia": "", "Eckhart": "This is NOT your address"}
     #[cfg(feature = "universal_fw")]
     tron__owner_address = 1238,  // "Owner address"
 }
@@ -41460,6 +41459,7 @@ impl TranslatedString {
         (Qstr::MP_QSTR_address__title_receive_address, Self::address__title_receive_address),
         (Qstr::MP_QSTR_address__title_refund_address, Self::address__title_refund_address),
         (Qstr::MP_QSTR_address__title_yours, Self::address__title_yours),
+        (Qstr::MP_QSTR_address__warning_not_yours, Self::address__warning_not_yours),
         (Qstr::MP_QSTR_address__xpub, Self::address__xpub),
         (Qstr::MP_QSTR_address_details__account_info, Self::address_details__account_info),
         (Qstr::MP_QSTR_address_details__derivation_path, Self::address_details__derivation_path),
@@ -42887,8 +42887,6 @@ impl TranslatedString {
         (Qstr::MP_QSTR_tron__claim_unfrozen_balance, Self::tron__claim_unfrozen_balance),
         #[cfg(feature = "universal_fw")]
         (Qstr::MP_QSTR_tron__claim_voting_rewards, Self::tron__claim_voting_rewards),
-        #[cfg(feature = "universal_fw")]
-        (Qstr::MP_QSTR_tron__not_your_address_footer, Self::tron__not_your_address_footer),
         #[cfg(feature = "universal_fw")]
         (Qstr::MP_QSTR_tron__owner_address, Self::tron__owner_address),
         (Qstr::MP_QSTR_tutorial__continue, Self::tutorial__continue),
