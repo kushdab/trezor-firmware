@@ -72,8 +72,9 @@ def set_language(session: DebugSession, lang: str, *, force: bool = False):
     else:
         language_data = build_and_sign_blob(lang, session)
     with session.test_ctx:
+        assert session.features.language
         if not session.features.language.startswith(lang) or force:
-            device.change_language(session, language_data)  # type: ignore
+            device.change_language(session, language_data)
     _CURRENT_TRANSLATION.LAYOUT = session.layout_type
     _CURRENT_TRANSLATION.TR = TRANSLATIONS[lang]
 

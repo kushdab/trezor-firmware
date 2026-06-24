@@ -45,7 +45,7 @@ class BackgroundDeviceHandler:
 
     def _configure_client(self, client: "Client") -> None:
         self.client = client
-        self.client.ui = NullUI  # type: ignore [NullUI is OK UI]
+        self.client.ui = NullUI  # type: ignore [is not assignable to]
         self.client.app.button_callback = self.client.ui.button_request
         self.client.debug.input_wait_type = DebugWaitType.CURRENT_LAYOUT
 
@@ -115,7 +115,7 @@ class BackgroundDeviceHandler:
         # TODO handle actual restart as well
         self.kill_task()
         emulator.restart()
-        self._configure_client(emulator.client)  # type: ignore [client cannot be None]
+        self._configure_client(emulator.client)
 
     def result(self, timeout: float | None = None) -> t.Any:
         if self.task is None:
