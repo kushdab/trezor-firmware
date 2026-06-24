@@ -73,7 +73,7 @@ def _get_shared_tropic_model(
     profile_dir: str,
     workdir: Path | None,
     port: int,
-    configfile: Path,
+    configfile: Path | None,
     logfile: Path | None,
 ) -> TropicModel:
     model = _SHARED_TROPIC_MODELS.get(profile_dir)
@@ -84,7 +84,7 @@ def _get_shared_tropic_model(
             workdir=workdir or ROOT,
             profile_dir=Path(profile_dir),
             port=port,
-            configfile=str(configfile),
+            configfile=configfile,
             logfile=logfile or (Path(profile_dir) / "trezor-tropic-model.log"),
         )
         model.start()
@@ -162,7 +162,7 @@ ALL_TAGS = get_tags()
 
 
 def _get_tropic_model_port(worker_id: int) -> int:
-    """Get a unique port for this worker process' Tropic model.
+    """Get a unique port for this worker process' shared Tropic model.
 
     Guarantees to be unique because each worker has a unique ID.
     """
@@ -173,12 +173,14 @@ def _get_port(worker_id: int) -> int:
     """Get a unique port for this worker process on which it can run.
 
     Guarantees to be unique because each worker has a unique ID.
-    #0=>20000, #1=>20003, #2=>20006, etc.
+    #0=>20000, #1=>20007, #2=>20014, etc.
     """
-    # One emulator instance occupies 3 consecutive ports:
+    # One emulator instance occupies 7 consecutive ports:
     # 1. normal link, 2. debug link and 3. webauthn fake interface
     # 4. USB serial 5. ble-emulator-data 6. ble-emulator-events
-    return 20000 + worker_id * 6
+    # 7. tropic model
+    # See: *_PORT_OFFSET constants in core sources
+    return 20000 + worker_id * 7
 
 
 class EmulatorWrapper:
@@ -228,7 +230,7 @@ class EmulatorWrapper:
                 Path(logs_dir) / f"trezor-tropic-model-{worker_id}.log"
             )
 
-        tropic_configfile = Path(TROPIC_MODEL_CONFIGFILE)
+        tropic_configfile = None
         if launch_tropic_model:
             tropic_config_output = (
                 Path(self.profile_dir.name) / "tropic_model_config_output.yml"
@@ -253,7 +255,7 @@ class EmulatorWrapper:
             launch_tropic_model_for_emulator = False
             tropic_model_port = shared_model.port
         else:
-            tropic_model_port = _get_tropic_model_port(worker_id)
+            tropic_model_port = None
         if gen == "legacy":
             self.emulator = LegacyEmulator(
                 executable,
@@ -271,7 +273,7 @@ class EmulatorWrapper:
                 workdir=workdir,
                 launch_tropic_model=launch_tropic_model_for_emulator,
                 tropic_model_port=tropic_model_port,
-                tropic_model_configfile=str(tropic_configfile),
+                tropic_model_configfile=tropic_configfile,
                 tropic_model_logfile=tropic_model_logfile,
                 port=_get_port(worker_id),
                 headless=headless,

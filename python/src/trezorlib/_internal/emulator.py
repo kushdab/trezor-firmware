@@ -35,6 +35,9 @@ TROPIC_MODEL_WAIT_TIME = 10
 EMULATOR_WAIT_TIME = 30
 _RUNNING_PIDS = set()
 
+HERE = Path(__file__).resolve().parent
+TROPIC_MODEL_CONFIGFILE = HERE / "data" / "tropic_model" / "config.yml"
+
 
 def _cleanup_pids() -> None:
     for process in _RUNNING_PIDS:
@@ -57,13 +60,13 @@ class TropicModel:
         workdir: Path,
         profile_dir: Path,
         port: int,
-        configfile: str,
+        configfile: Path | None,
         logfile: Union[TextIO, str, Path],
     ) -> None:
         self.workdir = workdir
         self.profile_dir = profile_dir
         self.port = port
-        self.configfile = configfile
+        self.configfile = configfile or TROPIC_MODEL_CONFIGFILE
         self.logfile = logfile
         self.process: Optional[subprocess.Popen] = None
 
@@ -107,7 +110,7 @@ class TropicModel:
                 "model_server",
                 "tcp",
                 "-c",
-                self.configfile,
+                str(self.configfile),
                 "-p",
                 str(self.port),
                 "-o",
@@ -143,7 +146,7 @@ class TropicModel:
 
             time.sleep(0.1)
 
-        LOG.info(f"Emulator ready after {time.monotonic() - start:.3f} seconds")
+        LOG.info(f"Tropic model ready after {time.monotonic() - start:.3f} seconds")
 
 
 class Emulator:
@@ -363,7 +366,7 @@ class CoreEmulator(Emulator):
         *args: Any,
         launch_tropic_model: bool = False,
         tropic_model_port: Optional[int] = None,
-        tropic_model_configfile: Optional[str] = None,
+        tropic_model_configfile: Optional[Path] = None,
         tropic_model_logfile: Union[TextIO, str, Path, None] = None,
         port: Optional[int] = None,
         main_args: Sequence[str] = ("-m", "main"),
@@ -381,15 +384,15 @@ class CoreEmulator(Emulator):
         if sdcard is not None:
             self.sdcard.write_bytes(sdcard)
 
+        if port:
+            self.port = port
         self.tropic_model_port = tropic_model_port
 
         if launch_tropic_model:
-            assert tropic_model_port
-            assert tropic_model_configfile
             self.tropic_model = TropicModel(
                 workdir=self.workdir,
                 profile_dir=self.profile_dir,
-                port=tropic_model_port,
+                port=self.tropic_port(),
                 configfile=tropic_model_configfile,
                 logfile=(
                     tropic_model_logfile or self.profile_dir / "trezor-tropic-model.log"
@@ -398,15 +401,24 @@ class CoreEmulator(Emulator):
         else:
             self.tropic_model = None
 
-        if port:
-            self.port = port
         self.disable_animation = disable_animation
         self.main_args = list(main_args)
         self.heap_size = heap_size
 
     def start_tropic_model(self) -> None:
-        if self.tropic_model:
+        if not self.tropic_model:
+            return
+
+        try:
             self.tropic_model.start()
+        except Exception:
+            # if trezor-emu needs the model, let it fail later
+            if isinstance(self.tropic_model.logfile, (str, Path)):
+                LOG.error(
+                    f"Failed to start Tropic model, for details see {self.tropic_model.logfile}"
+                )
+            else:
+                LOG.error("Failed to start Tropic model")
 
     def stop_tropic_model(self) -> None:
         if self.tropic_model:
@@ -424,8 +436,8 @@ class CoreEmulator(Emulator):
         if self.headless or self.disable_animation:
             env["TREZOR_DISABLE_FADE"] = "1"
             env["TREZOR_DISABLE_ANIMATION"] = "1"
-        if self.tropic_model_port is not None:
-            env["TROPIC_MODEL_PORT"] = str(self.tropic_model_port)
+        if self.tropic_model is not None:
+            env["TROPIC_MODEL_PORT"] = str(self.tropic_port())
 
         return env
 
@@ -436,6 +448,24 @@ class CoreEmulator(Emulator):
             + self.main_args
             + self.extra_args
         )
+
+    # TCP ports are hardcoded as offsets to the base wirelink port
+    def debuglink_port(self) -> int:
+        return self.port + 1
+
+    def fido2_port(self) -> int:
+        return self.port + 2
+
+    def vcp_port(self) -> int:
+        return self.port + 3
+
+    def ble_port(self) -> tuple[int, int]:
+        return (self.port + 4, self.port + 5)
+
+    # In contrast to the other ports, this one is served by the tropic model instead of emulator,
+    # and can be configured
+    def tropic_port(self) -> int:
+        return self.tropic_model_port or (self.port + 6)
 
 
 class LegacyEmulator(Emulator):

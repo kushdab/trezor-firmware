@@ -11,7 +11,9 @@ from cryptography.hazmat.primitives import serialization
 
 HERE = Path(__file__).parent
 ROOT = HERE.parent.parent.resolve()
-CONFIG_DIR = ROOT / "tests" / "tropic_model"
+CONFIG_DIR = (
+    ROOT / "python" / "src" / "trezorlib" / "_internal" / "data" / "tropic_model"
+)
 DEST_PATH = CONFIG_DIR / "config.yml"
 
 # private key used by the Tropic model to sign

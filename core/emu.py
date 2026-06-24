@@ -138,8 +138,9 @@ def _from_env(name: str) -> bool:
 @click.option("-r", "--record-dir", help="Directory where to record screen changes", type=click.Path(file_okay=False, dir_okay=True, path_type=Path))
 @click.option("-s", "--slip0014", is_flag=True, help="Initialize device with SLIP-14 seed (all all all...)")
 @click.option("-S", "--script-gdb-file", type=click.Path(exists=True, dir_okay=False), help="Run gdb with an init file")
-@click.option("-V", "--valgrind", is_flag=True, help="Use valgrind instead of debugger (-D)")
 @click.option("-t", "--temporary-profile", is_flag=True, help="Create an empty temporary profile")
+@click.option("--tropic-emulator/--no-tropic-emulator", default=True, help="Start Tropic01 model")
+@click.option("-V", "--valgrind", is_flag=True, help="Use valgrind instead of debugger (-D)")
 @click.option("-w", "--watch", is_flag=True, help="Restart emulator if sources change")
 @click.option("-X", "--extra-arg", "extra_args", multiple=True, help="Extra argument to pass to micropython")
 # fmt: on
@@ -165,8 +166,9 @@ def cli(
     record_dir: Path | None,
     slip0014: bool,
     script_gdb_file: str | Path | None,
-    valgrind: bool,
     temporary_profile: bool,
+    tropic_emulator: bool,
+    valgrind: bool,
     watch: bool,
     extra_args: list[str],
     command: list[str],
@@ -270,13 +272,14 @@ def cli(
         heap_size=heap_size,
         disable_animation=disable_animation,
         workdir=SRC_DIR,
+        launch_tropic_model=tropic_emulator,
     )
 
     emulator_env = dict(
         TREZOR_PATH=f"udp:127.0.0.1:{emulator.port}",
         TREZOR_PROFILE_DIR=str(profile_dir.resolve()),
         TREZOR_UDP_PORT=str(emulator.port),
-        TREZOR_FIDO2_UDP_PORT=str(emulator.port + 2),
+        TREZOR_FIDO2_UDP_PORT=str(emulator.fido2_port()),
         TREZOR_SRC=str(SRC_DIR),
     )
     os.environ.update(emulator_env)
