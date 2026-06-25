@@ -329,14 +329,14 @@ static bool ss_encrypt_and_hash(symmetric_state_t *ss, const uint8_t *plaintext,
 static bool ss_decrypt_and_hash(symmetric_state_t *ss,
                                 const uint8_t *ciphertext,
                                 size_t ciphertext_len, uint8_t *plaintext) {
-  bool status = decrypt_with_ad(&ss->cipher_state, ss->handshake_hash, HASHLEN,
-                                ciphertext, ciphertext_len, plaintext);
+  if (!decrypt_with_ad(&ss->cipher_state, ss->handshake_hash, HASHLEN,
+                       ciphertext, ciphertext_len, plaintext)) {
+    return false;
+  }
 
-  // In the decryption case, the hash is mixed even if decryption fails, as
-  // specified in the Noise Protocol Framework.
   ss_mix_hash(ss, ciphertext, ciphertext_len);
 
-  return status;
+  return true;
 }
 
 static bool noise_xxpsk3_init_state(noise_xxpsk3_state_t *state,
