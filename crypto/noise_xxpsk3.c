@@ -436,7 +436,6 @@ bool noise_xxpsk3_responder_create_response1(
     noise_xxpsk3_responder_t *rspn, const uint8_t *payload, size_t payload_size,
     uint8_t *response, size_t max_response_size, size_t *response_size) {
   noise_xxpsk3_state_t *state = &rspn->state;
-  uint8_t input_key_material[DHLEN] = {0};
 
   if (!rspn->initialized || response == NULL || response_size == NULL ||
       rspn->handshake_stage != READY_FOR_RESPONSE1 ||
@@ -462,9 +461,11 @@ bool noise_xxpsk3_responder_create_response1(
   ss_mix_hash(&state->symmetric_state, response, DHLEN);
   ss_mix_key(&state->symmetric_state, (uint8_t (*)[DHLEN])response);
 
+  uint8_t input_key_material[DHLEN] = {0};
   dh(&input_key_material, &state->ephemeral_private,
      &state->remote_ephemeral_public);
   ss_mix_key(&state->symmetric_state, &input_key_material);
+  memzero(input_key_material, sizeof(input_key_material));
 
   // Encrypt static public key
   if (!ss_encrypt_and_hash(&state->symmetric_state, state->static_public, DHLEN,
@@ -489,7 +490,6 @@ bool noise_xxpsk3_responder_create_response1(
   return true;
 
 cleanup:
-  memzero(input_key_material, sizeof(input_key_material));
   noise_xxpsk3_responder_deinit(rspn);
   return false;
 }
@@ -632,8 +632,6 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
                                              size_t response_len,
                                              uint8_t *payload,
                                              size_t *payload_size) {
-  uint8_t input_key_material[DHLEN] = {0};
-
   if (!intr->initialized || intr->handshake_stage != WAITING_FOR_RESPONSE1 ||
       response == NULL || payload_size == NULL || payload == NULL) {
     goto cleanup;
@@ -649,9 +647,11 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
   ss_mix_hash(&state->symmetric_state, state->remote_ephemeral_public, DHLEN);
   ss_mix_key(&state->symmetric_state, &state->remote_ephemeral_public);
 
+  uint8_t input_key_material[DHLEN] = {0};
   dh(&input_key_material, &state->ephemeral_private,
      &state->remote_ephemeral_public);
   ss_mix_key(&state->symmetric_state, &input_key_material);
+  memzero(input_key_material, sizeof(input_key_material));
 
   if (!ss_decrypt_and_hash(&state->symmetric_state, response + DHLEN,
                            DHLEN + NOISE_TAG_SIZE_BYTES,
@@ -663,6 +663,7 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
   dh(&input_key_material, &state->ephemeral_private,
      &state->remote_static_public);
   ss_mix_key(&state->symmetric_state, &input_key_material);
+  memzero(input_key_material, sizeof(input_key_material));
 
   size_t ciphertext_len = response_len - (2 * DHLEN + NOISE_TAG_SIZE_BYTES);
 
@@ -676,7 +677,6 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
     goto cleanup;
   }
 
-  memzero(input_key_material, sizeof(input_key_material));
   *payload_size = ciphertext_len - NOISE_TAG_SIZE_BYTES;
 
   intr->handshake_stage = READY_FOR_REQUEST2;
@@ -684,7 +684,6 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
   return true;
 
 cleanup:
-  memzero(input_key_material, sizeof(input_key_material));
   noise_xxpsk3_initiator_deinit(intr);
   return false;
 }
