@@ -410,12 +410,15 @@ void noise_xxpsk3_responder_deinit(noise_xxpsk3_responder_t *rspn) {
   memzero(rspn, sizeof(noise_xxpsk3_responder_t));
 }
 
-bool noise_xxpsk3_responder_handle_request1(noise_xxpsk3_responder_t *rspn,
-                                            const uint8_t *request,
-                                            size_t request_len) {
+bool noise_xxpsk3_responder_handle_request1(
+    noise_xxpsk3_responder_t *rspn, const uint8_t *request, size_t request_len,
+    uint8_t *payload, size_t max_payload_size, size_t *payload_size) {
   if (!rspn->initialized || rspn->handshake_stage != WAITING_FOR_REQUEST1 ||
-      request == NULL ||
-      request_len < NOISE_XXPSK3_DHLEN + NOISE_TAG_SIZE_BYTES) {
+      request == NULL || payload == NULL || payload_size == NULL) {
+    goto cleanup;
+  }
+
+  if (request_len < NOISE_XXPSK3_DHLEN + NOISE_TAG_SIZE_BYTES) {
     goto cleanup;
   }
 
@@ -430,11 +433,16 @@ bool noise_xxpsk3_responder_handle_request1(noise_xxpsk3_responder_t *rspn,
   // https://noiseprotocol.org/noise.html#handshake-tokens
   ss_mix_key(&state->symmetric_state, &state->remote_ephemeral_public);
 
+  size_t ciphertext_len = request_len - NOISE_XXPSK3_DHLEN;
+
+  if (max_payload_size < ciphertext_len - NOISE_TAG_SIZE_BYTES) {
+    goto cleanup;
+  }
+
   // PSK mode established a key at the `e` token, so the payload is encrypted.
-  uint8_t payload[NOISE_MAX_PAYLOAD_BYTES];
   if (!ss_decrypt_and_hash(&state->symmetric_state,
-                           request + NOISE_XXPSK3_DHLEN,
-                           request_len - NOISE_XXPSK3_DHLEN, payload)) {
+                           request + NOISE_XXPSK3_DHLEN, ciphertext_len,
+                           payload)) {
     goto cleanup;
   }
 
@@ -512,11 +520,9 @@ cleanup:
   return false;
 }
 
-bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
-                                            const uint8_t *request,
-                                            size_t request_len,
-                                            uint8_t *payload,
-                                            size_t *payload_size) {
+bool noise_xxpsk3_responder_handle_request2(
+    noise_xxpsk3_responder_t *rspn, const uint8_t *request, size_t request_len,
+    uint8_t *payload, size_t max_payload_size, size_t *payload_size) {
   noise_xxpsk3_state_t *state = &rspn->state;
 
   if (!rspn->initialized || request == NULL ||
@@ -551,6 +557,10 @@ bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
       request_len - (NOISE_XXPSK3_DHLEN + NOISE_TAG_SIZE_BYTES);
 
   if (ciphertext_len > (NOISE_MAX_PAYLOAD_BYTES + NOISE_TAG_SIZE_BYTES)) {
+    goto cleanup;
+  }
+
+  if (max_payload_size < ciphertext_len - NOISE_TAG_SIZE_BYTES) {
     goto cleanup;
   }
 
@@ -653,6 +663,7 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
                                              const uint8_t *response,
                                              size_t response_len,
                                              uint8_t *payload,
+                                             size_t max_payload_size,
                                              size_t *payload_size) {
   if (!intr->initialized || intr->handshake_stage != WAITING_FOR_RESPONSE1 ||
       response == NULL || payload_size == NULL || payload == NULL) {
@@ -693,6 +704,10 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
       response_len - (2 * NOISE_XXPSK3_DHLEN + NOISE_TAG_SIZE_BYTES);
 
   if (ciphertext_len > (NOISE_MAX_PAYLOAD_BYTES + NOISE_TAG_SIZE_BYTES)) {
+    goto cleanup;
+  }
+
+  if (max_payload_size < ciphertext_len - NOISE_TAG_SIZE_BYTES) {
     goto cleanup;
   }
 
