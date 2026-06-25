@@ -450,6 +450,8 @@ bool noise_xxpsk3_responder_handle_request1(
     goto cleanup;
   }
 
+  *payload_size = ciphertext_len - NOISE_TAG_SIZE_BYTES;
+
   rspn->handshake_stage = READY_FOR_RESPONSE1;
   return true;
 
@@ -577,6 +579,7 @@ bool noise_xxpsk3_responder_handle_request2(
                            ciphertext_len, payload)) {
     goto cleanup;
   }
+
   *payload_size = ciphertext_len - NOISE_TAG_SIZE_BYTES;
 
   ss_ts_split(&state->symmetric_state, &state->transport_state, false);
