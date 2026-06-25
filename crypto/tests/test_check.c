@@ -11675,8 +11675,11 @@ START_TEST(test_noise_xxpsk3) {
                    32 + 0 + 16);  // NOISE_XXPSK3_DHLEN + payload + tag
 
   // Responder handles request1
-  ret = noise_xxpsk3_responder_handle_request1(&responder, request1,
-                                               request1_size);
+  uint8_t req1_decrypted_payload[256] = {0};
+  size_t req1_decrypted_payload_size = 0;
+  ret = noise_xxpsk3_responder_handle_request1(
+      &responder, request1, request1_size, req1_decrypted_payload,
+      sizeof(req1_decrypted_payload), &req1_decrypted_payload_size);
   ck_assert_int_eq(ret, true);
 
   // Responder creates response1
@@ -11695,7 +11698,7 @@ START_TEST(test_noise_xxpsk3) {
   size_t rsp1_decrypted_payload_size = 0;
   ret = noise_xxpsk3_initiator_handle_response1(
       &initiator, response1, response1_size, rsp1_decrypted_payload,
-      &rsp1_decrypted_payload_size);
+      sizeof(rsp1_decrypted_payload), &rsp1_decrypted_payload_size);
   ck_assert_int_eq(ret, true);
 
   // Initiator creates request2
@@ -11713,7 +11716,7 @@ START_TEST(test_noise_xxpsk3) {
   size_t req2_decrypted_payload_size = 0;
   ret = noise_xxpsk3_responder_handle_request2(
       &responder, request2, request2_size, req2_decrypted_payload,
-      &req2_decrypted_payload_size);
+      sizeof(req2_decrypted_payload), &req2_decrypted_payload_size);
   ck_assert_int_eq(ret, true);
 
   // --- Transport phase: both directions ---
@@ -11970,8 +11973,14 @@ START_TEST(test_noise_xxpsk3_vectors) {
     ck_assert_int_eq(ret, true);
     ck_assert_mem_eq(req1, fromhex(vectors[v].expected_request1), req1_size);
 
-    ret = noise_xxpsk3_responder_handle_request1(&responder, req1, req1_size);
+    uint8_t req1_dec[512] = {0};
+    size_t req1_dec_size = 0;
+    ret = noise_xxpsk3_responder_handle_request1(&responder, req1, req1_size,
+                                                 req1_dec, sizeof(req1_dec),
+                                                 &req1_dec_size);
     ck_assert_int_eq(ret, true);
+    ck_assert_int_eq(req1_dec_size, req1_plen);
+    if (req1_plen) ck_assert_mem_eq(req1_dec, req1_payload, req1_plen);
 
     uint8_t rsp1[512] = {0};
     size_t rsp1_size = 0;
@@ -11983,7 +11992,8 @@ START_TEST(test_noise_xxpsk3_vectors) {
     uint8_t rsp1_dec[512] = {0};
     size_t rsp1_dec_size = 0;
     ret = noise_xxpsk3_initiator_handle_response1(&initiator, rsp1, rsp1_size,
-                                                  rsp1_dec, &rsp1_dec_size);
+                                                  rsp1_dec, sizeof(rsp1_dec),
+                                                  &rsp1_dec_size);
     ck_assert_int_eq(ret, true);
     ck_assert_int_eq(rsp1_dec_size, rsp1_plen);
     if (rsp1_plen) ck_assert_mem_eq(rsp1_dec, rsp1_payload, rsp1_plen);
@@ -11998,8 +12008,11 @@ START_TEST(test_noise_xxpsk3_vectors) {
     uint8_t req2_dec[512] = {0};
     size_t req2_dec_size = 0;
     ret = noise_xxpsk3_responder_handle_request2(&responder, req2, req2_size,
-                                                 req2_dec, &req2_dec_size);
+                                                 req2_dec, sizeof(req2_dec),
+                                                 &req2_dec_size);
     ck_assert_int_eq(ret, true);
+    ck_assert_int_eq(req2_dec_size, req2_plen);
+    if (req2_plen) ck_assert_mem_eq(req2_dec, req2_payload, req2_plen);
 
     uint8_t rsp2[512] = {0};
     size_t rsp2_size = 0;
