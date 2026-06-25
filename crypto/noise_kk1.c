@@ -137,9 +137,9 @@ static void mix_key(uint8_t chaining_key[SHA256_DIGEST_LENGTH],
                  "output_key must be truncated to NOISE_KK1_KEY_SIZE");
 }
 
-void split(uint8_t chaining_key[SHA256_DIGEST_LENGTH],
-           uint8_t output1[NOISE_KK1_KEY_SIZE],
-           uint8_t output2[NOISE_KK1_KEY_SIZE]) {
+static void split(uint8_t chaining_key[SHA256_DIGEST_LENGTH],
+                  uint8_t output1[NOISE_KK1_KEY_SIZE],
+                  uint8_t output2[NOISE_KK1_KEY_SIZE]) {
   // output1 || output2 =
   //   HKDF(salt=chaining_key, key=b"", output_length=2*NOISE_KK1_KEY_SIZE)
   hkdf(chaining_key, SHA256_DIGEST_LENGTH, NULL, 0, output1, output2);
