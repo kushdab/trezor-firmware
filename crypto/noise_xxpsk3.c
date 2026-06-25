@@ -413,6 +413,10 @@ void noise_xxpsk3_responder_deinit(noise_xxpsk3_responder_t *rspn) {
 bool noise_xxpsk3_responder_handle_request1(
     noise_xxpsk3_responder_t *rspn, const uint8_t *request, size_t request_len,
     uint8_t *payload, size_t max_payload_size, size_t *payload_size) {
+  if (rspn == NULL) {
+    return false;
+  }
+
   if (!rspn->initialized || rspn->handshake_stage != WAITING_FOR_REQUEST1 ||
       request == NULL || payload == NULL || payload_size == NULL) {
     goto cleanup;
@@ -523,6 +527,10 @@ cleanup:
 bool noise_xxpsk3_responder_handle_request2(
     noise_xxpsk3_responder_t *rspn, const uint8_t *request, size_t request_len,
     uint8_t *payload, size_t max_payload_size, size_t *payload_size) {
+  if (rspn == NULL) {
+    return false;
+  }
+
   noise_xxpsk3_state_t *state = &rspn->state;
 
   if (!rspn->initialized || request == NULL ||
@@ -665,10 +673,15 @@ bool noise_xxpsk3_initiator_handle_response1(noise_xxpsk3_initiator_t *intr,
                                              uint8_t *payload,
                                              size_t max_payload_size,
                                              size_t *payload_size) {
+  if (intr == NULL) {
+    return false;
+  }
+
   if (!intr->initialized || intr->handshake_stage != WAITING_FOR_RESPONSE1 ||
       response == NULL || payload_size == NULL || payload == NULL) {
     goto cleanup;
   }
+
   if (response_len < 2 * NOISE_XXPSK3_DHLEN + 2 * NOISE_TAG_SIZE_BYTES) {
     goto cleanup;
   }
