@@ -69,7 +69,7 @@ def load(
 
         app_binary = app_path.read_bytes()
         instance_id = trezorapp.load(session, app_binary, b"", version, force_reload)
-        click.echo(f"App loaded with instance ID: {instance_id}")
+        click.echo(f"Application ready with instance ID: {instance_id}")
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
