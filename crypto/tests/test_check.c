@@ -11671,7 +11671,8 @@ START_TEST(test_noise_xxpsk3) {
   ret = noise_xxpsk3_initiator_create_request1(
       &initiator, req1_payload, 0, request1, sizeof(request1), &request1_size);
   ck_assert_int_eq(ret, true);
-  ck_assert_int_eq(request1_size, 32 + 0 + 16);  // DHLEN + payload + tag
+  ck_assert_int_eq(request1_size,
+                   32 + 0 + 16);  // NOISE_XXPSK3_DHLEN + payload + tag
 
   // Responder handles request1
   ret = noise_xxpsk3_responder_handle_request1(&responder, request1,
@@ -11804,7 +11805,8 @@ START_TEST(test_noise_xxpsk3) {
 
   // Both sides must have the same handshake hash
   ck_assert_mem_eq(initiator.state.transport_state.handshake_hash,
-                   responder.state.transport_state.handshake_hash, HASHLEN);
+                   responder.state.transport_state.handshake_hash,
+                   NOISE_XXPSK3_HASHLEN);
 
   // Cleanup
   noise_xxpsk3_initiator_deinit(&initiator);
@@ -12017,9 +12019,11 @@ START_TEST(test_noise_xxpsk3_vectors) {
 
     // Check handshake hash
     ck_assert_mem_eq(initiator.state.transport_state.handshake_hash,
-                     responder.state.transport_state.handshake_hash, HASHLEN);
+                     responder.state.transport_state.handshake_hash,
+                     NOISE_XXPSK3_HASHLEN);
     ck_assert_mem_eq(initiator.state.transport_state.handshake_hash,
-                     fromhex(vectors[v].expected_handshake_hash), HASHLEN);
+                     fromhex(vectors[v].expected_handshake_hash),
+                     NOISE_XXPSK3_HASHLEN);
   }
 }
 END_TEST

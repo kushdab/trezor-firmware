@@ -23,52 +23,52 @@
 #include <stdint.h>
 #include <string.h>
 
-#define HASHLEN 32
-#define DHLEN 32
+#define NOISE_XXPSK3_HASHLEN 32
+#define NOISE_XXPSK3_DHLEN 32
 
 // Uncomment to enable initiator/responder functionality in the noise protocol
 // implementation.
-#define USE_NOISE_INITIATOR
-#define USE_NOISE_RESPONDER
+#define USE_NOISE_XXPSK3_INITIATOR
+#define USE_NOISE_XXPSK3_RESPONDER
 
 typedef struct {
-  uint8_t key[HASHLEN];
+  uint8_t key[NOISE_XXPSK3_HASHLEN];
   bool has_key;
   uint64_t nonce;
-} cipher_state_t;
+} noise_xxpsk3_cipher_state_t;
 
 typedef struct {
-  uint8_t handshake_hash[HASHLEN];
-  uint8_t chaining_key[HASHLEN];
-  cipher_state_t cipher_state;
-} symmetric_state_t;
+  uint8_t handshake_hash[NOISE_XXPSK3_HASHLEN];
+  uint8_t chaining_key[NOISE_XXPSK3_HASHLEN];
+  noise_xxpsk3_cipher_state_t cipher_state;
+} noise_xxpsk3_symmetric_state_t;
 
 typedef struct {
-  cipher_state_t send_cipher_state;
-  cipher_state_t receive_cipher_state;
-  uint8_t handshake_hash[HASHLEN];
-} transport_state_t;
+  noise_xxpsk3_cipher_state_t send_cipher_state;
+  noise_xxpsk3_cipher_state_t receive_cipher_state;
+  uint8_t handshake_hash[NOISE_XXPSK3_HASHLEN];
+} noise_xxpsk3_transport_state_t;
 
 typedef struct {
-  symmetric_state_t symmetric_state;
-  uint8_t static_private[DHLEN];
-  uint8_t static_public[DHLEN];
-  uint8_t psk[DHLEN];
+  noise_xxpsk3_symmetric_state_t symmetric_state;
+  uint8_t static_private[NOISE_XXPSK3_DHLEN];
+  uint8_t static_public[NOISE_XXPSK3_DHLEN];
+  uint8_t psk[NOISE_XXPSK3_DHLEN];
 
   bool has_ephemeral_private;
-  uint8_t ephemeral_private[DHLEN];
+  uint8_t ephemeral_private[NOISE_XXPSK3_DHLEN];
 
   bool has_remote_ephemeral_public;
-  uint8_t remote_ephemeral_public[DHLEN];
+  uint8_t remote_ephemeral_public[NOISE_XXPSK3_DHLEN];
 
   bool has_remote_static_public;
-  uint8_t remote_static_public[DHLEN];
+  uint8_t remote_static_public[NOISE_XXPSK3_DHLEN];
 
   bool has_transport_state;
-  transport_state_t transport_state;
+  noise_xxpsk3_transport_state_t transport_state;
 } noise_xxpsk3_state_t;
 
-#ifdef USE_NOISE_RESPONDER
+#ifdef USE_NOISE_XXPSK3_RESPONDER
 
 // Random values are used for greater resilience agains glitching attacks.
 typedef enum {
@@ -76,17 +76,17 @@ typedef enum {
   READY_FOR_RESPONSE1 = 0x252d533a,
   WAITING_FOR_REQUEST2 = 0xe3b601eb,
   RSPN_HANDSHAKE_COMPLETE = 0x54acac08
-} responder_handshake_stage_t;
+} noise_xxpsk3_responder_handshake_stage_t;
 
 typedef struct {
   bool initialized;
-  responder_handshake_stage_t handshake_stage;
+  noise_xxpsk3_responder_handshake_stage_t handshake_stage;
   noise_xxpsk3_state_t state;
 } noise_xxpsk3_responder_t;
 
-#endif /* USE_NOISE_RESPONDER */
+#endif /* USE_NOISE_XXPSK3_RESPONDER */
 
-#ifdef USE_NOISE_INITIATOR
+#ifdef USE_NOISE_XXPSK3_INITIATOR
 
 // Random values are used for greater resilience agains glitching attacks.
 typedef enum {
@@ -94,11 +94,11 @@ typedef enum {
   WAITING_FOR_RESPONSE1 = 0xa748a792,
   READY_FOR_REQUEST2 = 0xba244240,
   INTR_HANDSHAKE_COMPLETE = 0xf149f042
-} initiator_handshake_stage_t;
+} noise_xxpsk3_initiator_handshake_stage_t;
 
 typedef struct {
   bool initialized;
-  initiator_handshake_stage_t handshake_stage;
+  noise_xxpsk3_initiator_handshake_stage_t handshake_stage;
   noise_xxpsk3_state_t state;
 } noise_xxpsk3_initiator_t;
 
@@ -133,9 +133,9 @@ typedef struct {
  * @param static_private_key Static private key for the initiator (32 bytes)
  * @return true if the initiator was initialized correctly, false otherwise
  */
-bool noise_xxpsk3_initiator_init(noise_xxpsk3_initiator_t *intr,
-                                 const uint8_t psk[DHLEN],
-                                 const uint8_t static_private_key[DHLEN]);
+bool noise_xxpsk3_initiator_init(
+    noise_xxpsk3_initiator_t *intr, const uint8_t psk[NOISE_XXPSK3_DHLEN],
+    const uint8_t static_private_key[NOISE_XXPSK3_DHLEN]);
 
 /**
  * @brief Deinitialize the initiator structure and clear any sensitive data.
@@ -215,9 +215,9 @@ bool noise_xxpsk3_initiator_create_request2(
     noise_xxpsk3_initiator_t *intr, const uint8_t *payload, size_t payload_size,
     uint8_t *request, size_t max_request_size, size_t *request_size);
 
-#endif /* USE_NOISE_INITIATOR */
+#endif /* USE_NOISE_XXPSK3_INITIATOR */
 
-#ifdef USE_NOISE_RESPONDER
+#ifdef USE_NOISE_XXPSK3_RESPONDER
 
 /**
  * The following set of functions implements the responder side of the
@@ -250,9 +250,9 @@ bool noise_xxpsk3_initiator_create_request2(
  * @param static_private_key Static private key for the responder (32 bytes)
  * @return true if the responder was initialized correctly, false otherwise
  */
-bool noise_xxpsk3_responder_init(noise_xxpsk3_responder_t *rspn,
-                                 const uint8_t psk[DHLEN],
-                                 const uint8_t static_private_key[DHLEN]);
+bool noise_xxpsk3_responder_init(
+    noise_xxpsk3_responder_t *rspn, const uint8_t psk[NOISE_XXPSK3_DHLEN],
+    const uint8_t static_private_key[NOISE_XXPSK3_DHLEN]);
 
 /**
  * @brief Deinitialize the responder structure and clear any sensitive data.
@@ -325,7 +325,7 @@ bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
                                             uint8_t *payload,
                                             size_t *payload_size);
 
-#endif /* USE_NOISE_RESPONDER */
+#endif /* USE_NOISE_XXPSK3_RESPONDER */
 
 /**
  * @brief Encrypt a transport message on the send cipher state.
@@ -340,9 +340,9 @@ bool noise_xxpsk3_responder_handle_request2(noise_xxpsk3_responder_t *rspn,
  * (payload_size + 16)
  * @return true if the message was encrypted correctly, false otherwise
  */
-bool noise_xxpsk3_send_message(transport_state_t *ts, const uint8_t *payload,
-                               size_t payload_size, uint8_t *ciphertext,
-                               size_t max_ciphertext_size,
+bool noise_xxpsk3_send_message(noise_xxpsk3_transport_state_t *ts,
+                               const uint8_t *payload, size_t payload_size,
+                               uint8_t *ciphertext, size_t max_ciphertext_size,
                                size_t *ciphertext_size);
 
 /**
@@ -359,7 +359,7 @@ bool noise_xxpsk3_send_message(transport_state_t *ts, const uint8_t *payload,
  * @return true if the message was decrypted and authenticated correctly, false
  * otherwise
  */
-bool noise_xxpsk3_receive_message(transport_state_t *ts,
+bool noise_xxpsk3_receive_message(noise_xxpsk3_transport_state_t *ts,
                                   const uint8_t *ciphertext,
                                   size_t ciphertext_size, uint8_t *payload,
                                   size_t max_payload_size,
