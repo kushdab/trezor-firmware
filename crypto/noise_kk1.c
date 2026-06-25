@@ -222,8 +222,11 @@ bool noise_kk1_handle_handshake_request(
   memcpy(response, responder_ephemeral_public_key, sizeof(curve25519_key));
 
   uint8_t zero_nonce[NOISE_KK1_NONCE_SIZE] = {0};
-  encrypt(kauth, zero_nonce, handshake_hash, sizeof(handshake_hash), NULL, 0,
-          response->tag);
+  if (!encrypt(kauth, zero_nonce, handshake_hash, sizeof(handshake_hash), NULL,
+               0, response->tag)) {
+    memzero(kauth, sizeof(kauth));
+    return false;
+  }
   memzero(kauth, sizeof(kauth));
 
   // This is unnecessary, as the handshake hash is no longer used.
