@@ -11548,13 +11548,13 @@ START_TEST(test_noise_kk1) {
       "5e21772c915f1bbfeff75c87c7c2a1589dcb5fe791656c9332";
 
   uint8_t plaintext1[sizeof(message1)] = {0};
-  uint8_t ciphertext1[sizeof(plaintext1) + NOISE_TAG_SIZE];
+  uint8_t ciphertext1[sizeof(plaintext1) + NOISE_KK1_TAG_SIZE];
   uint8_t plaintext2[sizeof(message2)] = {0};
-  uint8_t ciphertext2[sizeof(plaintext2) + NOISE_TAG_SIZE] = {0};
+  uint8_t ciphertext2[sizeof(plaintext2) + NOISE_KK1_TAG_SIZE] = {0};
   uint8_t plaintext3[sizeof(message3)] = {0};
-  uint8_t ciphertext3[sizeof(plaintext3) + NOISE_TAG_SIZE] = {0};
+  uint8_t ciphertext3[sizeof(plaintext3) + NOISE_KK1_TAG_SIZE] = {0};
   uint8_t plaintext4[sizeof(message4)] = {0};
-  uint8_t ciphertext4[sizeof(plaintext4) + NOISE_TAG_SIZE] = {0};
+  uint8_t ciphertext4[sizeof(plaintext4) + NOISE_KK1_TAG_SIZE] = {0};
 
   bool ret = false;
 

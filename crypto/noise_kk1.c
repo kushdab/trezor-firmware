@@ -50,7 +50,7 @@ static bool encrypt(const uint8_t key[NOISE_KEY_SIZE],
 
   if (gcm_encrypt_message(nonce, NOISE_NONCE_SIZE, associated_data,
                           associated_data_length, ciphertext, plaintext_length,
-                          ciphertext + plaintext_length, NOISE_TAG_SIZE,
+                          ciphertext + plaintext_length, NOISE_KK1_TAG_SIZE,
                           &ctx) != RETURN_GOOD) {
     memzero(&ctx, sizeof(ctx));
     memzero(ciphertext, plaintext_length);
@@ -67,10 +67,10 @@ static bool decrypt(const uint8_t key[NOISE_KEY_SIZE],
                     size_t associated_data_length, const uint8_t *ciphertext,
                     size_t ciphertext_length, uint8_t *plaintext) {
   // plaintext = AES-GCM-Decrypt(key, nonce, associated_data, ciphertext)
-  if (ciphertext_length < NOISE_TAG_SIZE) {
+  if (ciphertext_length < NOISE_KK1_TAG_SIZE) {
     return false;
   }
-  const size_t plaintext_length = ciphertext_length - NOISE_TAG_SIZE;
+  const size_t plaintext_length = ciphertext_length - NOISE_KK1_TAG_SIZE;
 
   gcm_ctx ctx = {0};
   if (gcm_init_and_key(key, NOISE_KEY_SIZE, &ctx) != RETURN_GOOD) {
@@ -83,7 +83,7 @@ static bool decrypt(const uint8_t key[NOISE_KEY_SIZE],
 
   if (gcm_decrypt_message(nonce, NOISE_NONCE_SIZE, associated_data,
                           associated_data_length, plaintext, plaintext_length,
-                          ciphertext + plaintext_length, NOISE_TAG_SIZE,
+                          ciphertext + plaintext_length, NOISE_KK1_TAG_SIZE,
                           &ctx) != RETURN_GOOD) {
     memzero(&ctx, sizeof(ctx));
     memzero(plaintext, plaintext_length);
@@ -278,7 +278,7 @@ bool noise_kk1_handle_handshake_response(
 
   uint8_t zero_nonce[NOISE_NONCE_SIZE] = {0};
   if (!decrypt(kauth, zero_nonce, handshake_hash, sizeof(handshake_hash),
-               response->tag, NOISE_TAG_SIZE, NULL)) {
+               response->tag, NOISE_KK1_TAG_SIZE, NULL)) {
     // Wrong tag
     memzero(kauth, sizeof(kauth));
     return false;
