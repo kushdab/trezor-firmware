@@ -33,14 +33,14 @@ static uint8_t protocol_name[SHA256_DIGEST_LENGTH] = {
     '5', '5', '1', '9', '_', 'A', 'E', 'S',  'G',  'C', 'M',
     '_', 'S', 'H', 'A', '2', '5', '6', 0x00, 0x00, 0x00};
 
-static bool encrypt(const uint8_t key[NOISE_KEY_SIZE],
-                    const uint8_t nonce[NOISE_NONCE_SIZE],
+static bool encrypt(const uint8_t key[NOISE_KK1_KEY_SIZE],
+                    const uint8_t nonce[NOISE_KK1_NONCE_SIZE],
                     const uint8_t *associated_data,
                     size_t associated_data_length, const uint8_t *plaintext,
                     size_t plaintext_length, uint8_t *ciphertext) {
   // ciphertext = AES-GCM-Encrypt(key, nonce, associated_data, plaintext)
   gcm_ctx ctx = {0};
-  if (gcm_init_and_key(key, NOISE_KEY_SIZE, &ctx) != RETURN_GOOD) {
+  if (gcm_init_and_key(key, NOISE_KK1_KEY_SIZE, &ctx) != RETURN_GOOD) {
     return false;
   }
 
@@ -48,7 +48,7 @@ static bool encrypt(const uint8_t key[NOISE_KEY_SIZE],
     memcpy(ciphertext, plaintext, plaintext_length);
   }
 
-  if (gcm_encrypt_message(nonce, NOISE_NONCE_SIZE, associated_data,
+  if (gcm_encrypt_message(nonce, NOISE_KK1_NONCE_SIZE, associated_data,
                           associated_data_length, ciphertext, plaintext_length,
                           ciphertext + plaintext_length, NOISE_KK1_TAG_SIZE,
                           &ctx) != RETURN_GOOD) {
@@ -61,8 +61,8 @@ static bool encrypt(const uint8_t key[NOISE_KEY_SIZE],
   return true;
 }
 
-static bool decrypt(const uint8_t key[NOISE_KEY_SIZE],
-                    const uint8_t nonce[NOISE_NONCE_SIZE],
+static bool decrypt(const uint8_t key[NOISE_KK1_KEY_SIZE],
+                    const uint8_t nonce[NOISE_KK1_NONCE_SIZE],
                     const uint8_t *associated_data,
                     size_t associated_data_length, const uint8_t *ciphertext,
                     size_t ciphertext_length, uint8_t *plaintext) {
@@ -73,7 +73,7 @@ static bool decrypt(const uint8_t key[NOISE_KEY_SIZE],
   const size_t plaintext_length = ciphertext_length - NOISE_KK1_TAG_SIZE;
 
   gcm_ctx ctx = {0};
-  if (gcm_init_and_key(key, NOISE_KEY_SIZE, &ctx) != RETURN_GOOD) {
+  if (gcm_init_and_key(key, NOISE_KK1_KEY_SIZE, &ctx) != RETURN_GOOD) {
     return false;
   }
 
@@ -81,7 +81,7 @@ static bool decrypt(const uint8_t key[NOISE_KEY_SIZE],
     memcpy(plaintext, ciphertext, plaintext_length);
   }
 
-  if (gcm_decrypt_message(nonce, NOISE_NONCE_SIZE, associated_data,
+  if (gcm_decrypt_message(nonce, NOISE_KK1_NONCE_SIZE, associated_data,
                           associated_data_length, plaintext, plaintext_length,
                           ciphertext + plaintext_length, NOISE_KK1_TAG_SIZE,
                           &ctx) != RETURN_GOOD) {
@@ -127,28 +127,30 @@ static void hkdf(const uint8_t *salt, size_t salt_length, const uint8_t *key,
 
 static void mix_key(uint8_t chaining_key[SHA256_DIGEST_LENGTH],
                     curve25519_key input_key,
-                    uint8_t output_key[NOISE_KEY_SIZE]) {
+                    uint8_t output_key[NOISE_KK1_KEY_SIZE]) {
   // chaining_key || output_key =
-  //   HKDF(salt=chaining_key, key=input_key, output_length=2*NOISE_KEY_SIZE)
+  //   HKDF(salt=chaining_key, key=input_key,
+  //   output_length=2*NOISE_KK1_KEY_SIZE)
   hkdf(chaining_key, SHA256_DIGEST_LENGTH, input_key, sizeof(curve25519_key),
        chaining_key, output_key);
-  _Static_assert(NOISE_KEY_SIZE == SHA256_DIGEST_LENGTH,
-                 "output_key must be truncated to NOISE_KEY_SIZE");
+  _Static_assert(NOISE_KK1_KEY_SIZE == SHA256_DIGEST_LENGTH,
+                 "output_key must be truncated to NOISE_KK1_KEY_SIZE");
 }
 
 void split(uint8_t chaining_key[SHA256_DIGEST_LENGTH],
-           uint8_t output1[NOISE_KEY_SIZE], uint8_t output2[NOISE_KEY_SIZE]) {
+           uint8_t output1[NOISE_KK1_KEY_SIZE],
+           uint8_t output2[NOISE_KK1_KEY_SIZE]) {
   // output1 || output2 =
-  //   HKDF(salt=chaining_key, key=b"", output_length=2*NOISE_KEY_SIZE)
+  //   HKDF(salt=chaining_key, key=b"", output_length=2*NOISE_KK1_KEY_SIZE)
   hkdf(chaining_key, SHA256_DIGEST_LENGTH, NULL, 0, output1, output2);
-  _Static_assert(NOISE_KEY_SIZE == SHA256_DIGEST_LENGTH,
-                 "output1 and output2 must be truncated to NOISE_KEY_SIZE");
+  _Static_assert(NOISE_KK1_KEY_SIZE == SHA256_DIGEST_LENGTH,
+                 "output1 and output2 must be truncated to NOISE_KK1_KEY_SIZE");
 }
 
-static bool increase_nonce(uint8_t nonce[NOISE_NONCE_SIZE]) {
+static bool increase_nonce(uint8_t nonce[NOISE_KK1_NONCE_SIZE]) {
   // The first 4 bytes of the nonce are zeros
   // The last 8 bytes of the nonce are a big-endian encoded counter
-  for (int i = NOISE_NONCE_SIZE - 1; i >= 4; i--) {
+  for (int i = NOISE_KK1_NONCE_SIZE - 1; i >= 4; i--) {
     nonce[i]++;
     if (nonce[i] != 0) {
       return true;
@@ -200,7 +202,7 @@ bool noise_kk1_handle_handshake_request(
 
   curve25519_key shared_secret = {0};
   uint8_t chaining_key[SHA256_DIGEST_LENGTH] = {0};
-  uint8_t kauth[NOISE_KEY_SIZE] = {0};
+  uint8_t kauth[NOISE_KK1_KEY_SIZE] = {0};
   memcpy(chaining_key, protocol_name, sizeof(protocol_name));
   curve25519_scalarmult(shared_secret, responder_ephemeral_private_key,
                         request->initiator_ephemeral_public_key);
@@ -219,7 +221,7 @@ bool noise_kk1_handle_handshake_request(
 
   memcpy(response, responder_ephemeral_public_key, sizeof(curve25519_key));
 
-  uint8_t zero_nonce[NOISE_NONCE_SIZE] = {0};
+  uint8_t zero_nonce[NOISE_KK1_NONCE_SIZE] = {0};
   encrypt(kauth, zero_nonce, handshake_hash, sizeof(handshake_hash), NULL, 0,
           response->tag);
   memzero(kauth, sizeof(kauth));
@@ -227,8 +229,8 @@ bool noise_kk1_handle_handshake_request(
   // This is unnecessary, as the handshake hash is no longer used.
   // mix_hash(handshake_hash, response->tag, sizeof(response->tag));
 
-  memset(ctx->encryption_nonce, 0, NOISE_NONCE_SIZE);
-  memset(ctx->decryption_nonce, 0, NOISE_NONCE_SIZE);
+  memset(ctx->encryption_nonce, 0, NOISE_KK1_NONCE_SIZE);
+  memset(ctx->decryption_nonce, 0, NOISE_KK1_NONCE_SIZE);
 
   ctx->initialized = true;
 
@@ -259,7 +261,7 @@ bool noise_kk1_handle_handshake_response(
 
   curve25519_key shared_secret = {0};
   uint8_t chaining_key[SHA256_DIGEST_LENGTH] = {0};
-  uint8_t kauth[NOISE_KEY_SIZE] = {0};
+  uint8_t kauth[NOISE_KK1_KEY_SIZE] = {0};
   memcpy(chaining_key, protocol_name, sizeof(protocol_name));
   curve25519_scalarmult(shared_secret, ctx->initiator_ephemeral_private_key,
                         response->responder_ephemeral_public_key);
@@ -276,7 +278,7 @@ bool noise_kk1_handle_handshake_response(
   split(chaining_key, ctx->encryption_key, ctx->decryption_key);
   memzero(chaining_key, sizeof(chaining_key));
 
-  uint8_t zero_nonce[NOISE_NONCE_SIZE] = {0};
+  uint8_t zero_nonce[NOISE_KK1_NONCE_SIZE] = {0};
   if (!decrypt(kauth, zero_nonce, handshake_hash, sizeof(handshake_hash),
                response->tag, NOISE_KK1_TAG_SIZE, NULL)) {
     // Wrong tag
@@ -288,8 +290,8 @@ bool noise_kk1_handle_handshake_response(
   // This is unnecessary, as the handshake hash is no longer used.
   // mix_hash(handshake_hash, response->tag, sizeof(response->tag));
 
-  memset(ctx->encryption_nonce, 0, NOISE_NONCE_SIZE);
-  memset(ctx->decryption_nonce, 0, NOISE_NONCE_SIZE);
+  memset(ctx->encryption_nonce, 0, NOISE_KK1_NONCE_SIZE);
+  memset(ctx->decryption_nonce, 0, NOISE_KK1_NONCE_SIZE);
 
   ctx->initialized = true;
 
